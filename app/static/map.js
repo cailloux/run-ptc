@@ -80,14 +80,45 @@ async function loadNodes(layer, label, show) {
   if (show) group.addTo(map);
 }
 
+const METERS_PER_MILE = 1609.344;
+
+function formatEastern(iso, opts = { dateStyle: 'medium', timeStyle: 'short' }) {
+  return new Date(iso).toLocaleString('en-US', { timeZone: 'America/New_York', ...opts });
+}
+
+function trackPopup(f) {
+  const p = f.properties;
+  const link = `https://intervals.icu/activities/${encodeURIComponent(p.intervals_id)}`;
+  return `<b>${escapeHtml(formatEastern(p.start_at))}</b><br>`
+    + `${escapeHtml(p.name ?? '')}<br>`
+    + `${(p.distance_m / METERS_PER_MILE).toFixed(2)} mi · ${p.parts} part${p.parts === 1 ? '' : 's'}<br>`
+    + `<a href="${link}" target="_blank" rel="noopener">Open in Intervals</a>`;
+}
+
+// Run tracks are off by default and fetched the first time they're shown.
+const tracks = L.geoJSON(null, {
+  style: { color: '#e6550d', weight: 2, opacity: 0.5 },
+  onEachFeature: (f, l) => l.bindPopup(() => trackPopup(f)),
+});
+let tracksRequested = false;
+tracks.on('add', () => {
+  if (tracksRequested) return;
+  tracksRequested = true;
+  getJson('activities').then((fc) => tracks.addData(fc)).catch((err) => alert(err.message));
+});
+
 async function loadStats() {
   const s = await getJson('stats');
   const row = (label, v) => v
     ? `<tr><td>${label}</td><td>${v.counted}</td><td>${v.counted_mi} mi</td><td>${v.nodes}</td></tr>`
     : '';
+  const latest = s.runs.latest_start_at
+    ? ` (latest ${escapeHtml(formatEastern(s.runs.latest_start_at, { dateStyle: 'medium' }))})`
+    : '';
   document.getElementById('stats').innerHTML =
     '<tr><th></th><th>Counted</th><th>Miles</th><th>Nodes</th></tr>'
-    + row('Cart paths', s.cartpath) + row('Roads', s.road);
+    + row('Cart paths', s.cartpath) + row('Roads', s.road)
+    + `<tr><td colspan="4">${s.runs.city} runs in the city${latest}</td></tr>`;
 }
 
 function findCartpath(oid) {
@@ -114,8 +145,10 @@ document.getElementById('find').addEventListener('submit', (e) => {
     loadNodes('cartpath', 'Cart path nodes', true),
     loadNodes('road', 'Road nodes', false),
   ]);
+  overlays['Run tracks'] = tracks;
   L.control.layers(null, overlays, { collapsed: false, position: 'bottomright' }).addTo(map);
-  // Link to a feature with #oid=12062.
+  // Link to a feature with #oid=12062; add &tracks to show run tracks.
   const linked = location.hash.match(/oid=(\d+)/);
   if (linked) findCartpath(Number(linked[1]));
+  if (/\btracks\b/.test(location.hash)) tracks.addTo(map);
 })().catch((err) => alert(err.message));

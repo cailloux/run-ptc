@@ -62,9 +62,33 @@ def nodes(layer: LayerName) -> Response:
     """, (layer,))
 
 
+@router.get("/activities")
+def activities() -> Response:
+    """City runs. Tracks are simplified to 3 m for display only; matching uses full geometry."""
+    return _geojson("""
+        SELECT json_build_object('type', 'FeatureCollection', 'features',
+            coalesce(json_agg(json_build_object(
+                'type', 'Feature',
+                'geometry', ST_AsGeoJSON(ST_Transform(ST_Simplify(geom, 3), 4326), 6)::json,
+                'properties', json_build_object(
+                    'id', id,
+                    'intervals_id', intervals_id,
+                    'start_at', start_at,
+                    'name', name,
+                    'sport', sport,
+                    'distance_m', round(distance_m::numeric),
+                    'parts', ST_NumGeometries(geom))
+            ) ORDER BY start_at), '[]'::json))::text
+        FROM activity WHERE status = 'city'
+    """, ())
+
+
 @router.get("/stats")
 def stats() -> dict:
     with db.connect() as conn:
+        runs, latest = conn.execute(
+            "SELECT count(*), max(start_at) FROM activity WHERE status = 'city'"
+        ).fetchone()
         rows = conn.execute("""
             SELECT s.layer,
                    count(*) AS stored,
@@ -76,7 +100,7 @@ def stats() -> dict:
                     WHERE s2.layer = s.layer) AS nodes
             FROM segment s GROUP BY s.layer
         """).fetchall()
-    return {
+    result = {
         layer: {
             "stored": stored,
             "counted": counted,
@@ -87,3 +111,5 @@ def stats() -> dict:
         }
         for layer, stored, counted, counted_m, excluded, excluded_m, node_count in rows
     }
+    result["runs"] = {"city": runs, "latest_start_at": latest}
+    return result
