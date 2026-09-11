@@ -4,7 +4,7 @@ body { font: 13px/1.4 system-ui, sans-serif; }
 #panel {
   position: absolute; top: 10px; right: 10px; z-index: 1000;
   background: #fff; padding: 10px 12px; border-radius: 6px;
-  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.35); min-width: 260px;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.35); min-width: 280px; max-width: 320px;
 }
 #panel h1 { font-size: 15px; margin: 0 0 6px; }
 #stats { border-collapse: collapse; margin-bottom: 8px; }
@@ -13,16 +13,28 @@ body { font: 13px/1.4 system-ui, sans-serif; }
 #find { display: flex; gap: 4px; margin-bottom: 8px; }
 #find input { flex: 1; }
 
-.swatch { display: inline-block; width: 18px; height: 0; margin: 0 4px 3px 0; vertical-align: middle; }
-.swatch.cartpath { border-top: 3px solid #1a9850; }
-.swatch.road { border-top: 3px solid #3b6fb6; margin-left: 10px; }
-.swatch.uncounted { border-top: 2px solid #aaa; }
-.swatch.excluded { border-top: 3px dashed #777; margin-left: 10px; }
-
 #completion { margin-bottom: 8px; }
 #completion .headline { font-size: 14px; font-weight: 600; }
-#completion .pct { color: #1a9850; margin-left: 4px; }
+#completion .pct { color: #127a56; margin-left: 4px; }
 
-.dot { display: inline-block; border-radius: 50%; margin: 0 4px 1px 0; vertical-align: middle; }
-.dot.missed { width: 7px; height: 7px; background: #d7301f; }
-.dot.hit { width: 5px; height: 5px; background: #333; margin-left: 10px; }
+#sync { display: flex; gap: 8px; align-items: flex-start; justify-content: space-between;
+        margin-bottom: 8px; padding: 6px 0; border-top: 1px solid #eee; border-bottom: 1px solid #eee; }
+#sync-status { color: #52514e; }
+#sync-status .error { color: #b3261e; }
+#sync-now { flex: none; }
+
+#legend > div { margin-bottom: 2px; }
+.legend-note { color: #77766f; }
+.swatch { display: inline-block; width: 18px; height: 0; margin: 0 4px 3px 0; vertical-align: middle; }
+.swatch + .swatch, span + .swatch { margin-left: 8px; }
+.swatch.complete { border-top: 4px solid #199e70; }
+.swatch.cart-run { border-top: 3px solid #1c5cab; }
+.swatch.cart-not-run { border-top: 3px solid #d95926; }
+.swatch.road-run { border-top: 2px solid #5598e7; }
+.swatch.road-not-run { border-top: 2px solid #8f8e89; }
+.swatch.excluded { border-top: 3px dashed #5f5e5a; }
+.swatch.uncounted { border-top: 2px solid #cac9c4; }
+
+.dot { display: inline-block; border-radius: 50%; margin: 0 4px 1px 0; vertical-align: middle; box-sizing: border-box; }
+.dot.missed { width: 8px; height: 8px; background: #fff; border: 1.5px solid #3a3936; }
+.dot.hit { width: 5px; height: 5px; background: #333; margin-left: 8px; }
