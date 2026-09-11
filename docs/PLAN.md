@@ -153,19 +153,26 @@ The route is a start point plus an ordered list of legs, and each leg holds its 
 
 The map stays on Leaflet, since the viewer already validated it with this data. Its canvas renderer handles the node and segment counts involved. Layers:
 
-- Cart path coverage and road coverage, colored run / not run per node interval
-- Missed nodes as dots
+- Cart path coverage in three states: complete segments; run intervals on segments that aren't complete yet; intervals not run. Road coverage in two: run and not run. An interval is run when both of its end nodes are hit, and consecutive intervals with the same state are drawn as one line, never across parts.
+- Missed nodes as dots (cart paths on by default, roads off; shown from zoom 15)
+- Hit nodes as dots, off by default; clicking one shows the run's date, name, and Intervals link
 - Excluded segments, greyed out
 - Run tracks, off by default
 
+The coverage colors were checked with a colorblind-safety validator against the gray basemap: the three cart path states are distinguishable under every common color-vision deficiency, and line weight separates complete from partial as a second cue.
+
 A side panel shows cart path miles complete, the percentage, segments complete, road miles covered, the last sync time, and a sync button. The UI is desktop-first.
 
+The sync button runs the same incremental sync as the CLI (a week before the newest run through today) in the background, and the panel polls until it finishes, then reloads the coverage. Sync, import, and recompute share one lock, so only one runs at a time from any trigger; a second request gets a 409 from the API or an "another job is running" exit from the CLI. Every run of a data job is recorded in `job_run` (trigger, times, status, summary, error), which the panel reads for the last sync time.
+
 ```
-GET  /stats
+GET  /stats                            metrics, counts, last sync
 GET  /network?layer=cartpath|road      GeoJSON with coverage state
-GET  /nodes?status=missed
+GET  /nodes?layer=&status=missed|hit
+GET  /nodes/{id}                       hit run's date, name, Intervals id
 GET  /activities
-POST /sync
+GET  /sync                             latest sync, last success, running?
+POST /sync                             202 started, 409 busy, 503 no credentials
 POST /route/leg   {from, to} -> geometry, length_m
 ```
 
@@ -204,6 +211,10 @@ Modeled on the Plane States admin page, minus its auth:
 - A status page per data source (city layers, Intervals sync): last success, last attempt, last error, record counts, and a stale or current flag, with buttons to run a job now and refresh.
 - Alerts on failures and staleness, sent only after a grace period and at most once per stale episode, with a stored marker preventing repeats. Each alert includes the last error and what to do. A failure to send an alert never breaks the job, and a "send test alert" button proves the alert path works. The channel (SMTP, ntfy, Pushover, a Discord webhook, or Apprise, which covers them all) is to be decided, since Cloudflare Email Routing isn't available on kirk.
 - Freshness on the map: a banner when data is stale or the last job failed, and a layer highlighting the segments the last city refresh added or changed.
+
+### Phase 8: UI design and polish
+
+One holistic design pass over the whole UI once every feature is in place, instead of styling each phase piecemeal: layout (a fixed sidebar was deferred from Phase 4), typography, the coverage palette in context, legend and layer controls, and the route builder's controls.
 
 Each phase can be verified on the map before the next builds on it. Routing comes last because it doesn't depend on coverage, and graph topology is the fiddliest part to get right.
 

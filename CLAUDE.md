@@ -77,7 +77,8 @@ Store timestamps in UTC. Display them in US Eastern. Dates passed to Intervals a
 - Kirk has no docker-compose. The two containers, `run-ptc` (app, host port 8010) and `run-ptc-db` (`pgrouting/pgrouting`, no published port), are Unraid templates in `deploy/unraid/`, on the `services` bridge network. Favor env vars for all config so it can be set in the Unraid Docker UI.
 - Appdata path: `/mnt/user/appdata/run-ptc/`. The db data is in `pgdata/`, the dev pair (`scripts/kirk-dev.sh`) in `dev/`, and the synced source for tests in `src/`.
 - The dev pair (`run-ptc-dev` at http://192.168.50.2:8011, `run-ptc-dev-db`) is the standing development environment. Keep it running; don't tear it down after a phase. The user switches to the Unraid-managed containers manually.
-- The app applies pending migrations and reapplies exclusions on startup.
+- The app applies pending migrations and reapplies exclusions on startup, and marks any `job_run` rows left `running` by a crash as interrupted.
+- Sync, import, and recompute share one advisory lock (`app/jobs.py`) whether started from the CLI or the map's Sync button, and each run is logged in `job_run`. Run new data jobs through `start_job(...).run(fn)`.
 - The app image has a `HEALTHCHECK` using curl against `/health`.
 - CI: GitHub Actions builds the image and pushes it to GHCR. Dependabot covers pip, Docker, and Actions.
 - Authelia and Traefik are not in v1. Don't add them unless asked.
