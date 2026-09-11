@@ -1,20 +1,30 @@
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response
 
 from app import db
+from app.config import intervals_credentials, load_settings
+from app.coverage import coverage_geojson
+from app.intervals import IntervalsClient
+from app.jobs import JobBusy, last_runs, start_job
 from app.matching import METERS_PER_MILE, metrics
+from app.sync import sync, sync_window
 
 router = APIRouter()
 
 LayerName = Literal["cartpath", "road"]
 
 
-def _geojson(sql: str, params: tuple) -> Response:
+def _geojson(sql: str, params: tuple | dict) -> Response:
     """Run a query that builds a FeatureCollection in PostGIS and return it as-is."""
     with db.connect() as conn:
         body = conn.execute(sql, params).fetchone()[0]
     return Response(body, media_type="application/geo+json")
+
+
+def default_intervals_client() -> IntervalsClient:
+    athlete_id, api_key = intervals_credentials()
+    return IntervalsClient(athlete_id, api_key)
 
 
 @router.get("/health")
@@ -26,25 +36,10 @@ def health() -> dict:
 
 @router.get("/network")
 def network(layer: LayerName) -> Response:
-    return _geojson("""
-        SELECT json_build_object('type', 'FeatureCollection', 'features',
-            coalesce(json_agg(json_build_object(
-                'type', 'Feature',
-                'geometry', ST_AsGeoJSON(ST_Transform(geom, 4326), 6)::json,
-                'properties', json_build_object(
-                    'id', id,
-                    'source_key', source_key,
-                    'source_oid', source_oid,
-                    'name', name,
-                    'seg_type', seg_type,
-                    'counted', counted,
-                    'excluded', excluded,
-                    'exclusion_reason', exclusion_reason,
-                    'length_m', round(length_m::numeric, 1),
-                    'parts', ST_NumGeometries(geom))
-            ) ORDER BY id), '[]'::json))::text
-        FROM segment WHERE layer = %s
-    """, (layer,))
+    """Segments with coverage state per run of node intervals (see app/coverage.py)."""
+    with db.connect() as conn:
+        body = coverage_geojson(conn, layer)
+    return Response(body, media_type="application/geo+json")
 
 
 @router.get("/nodes")
@@ -108,6 +103,41 @@ def activities() -> Response:
     """, ())
 
 
+@router.get("/sync")
+def sync_status() -> dict:
+    """The latest sync (any trigger), the latest successful one, and whether a job is running."""
+    with db.connect() as conn:
+        return last_runs(conn, "sync")
+
+
+@router.post("/sync", status_code=202)
+def start_sync(request: Request, background: BackgroundTasks) -> dict:
+    """Run the default incremental sync in the background. Poll GET /sync for the result."""
+    try:
+        client = request.app.state.intervals_client_factory()
+    except RuntimeError as e:   # credentials not set
+        raise HTTPException(status_code=503, detail=str(e))
+    try:
+        job = start_job("sync", "button")
+    except JobBusy:
+        client.close()
+        raise HTTPException(status_code=409,
+                            detail="another job is running (sync, import, or recompute)")
+    settings = load_settings()
+
+    def run_sync(conn) -> list[str]:
+        try:
+            start, end = sync_window(conn, settings)
+            report = sync(conn, client, start, end, settings)
+        finally:
+            client.close()
+        return [report.headline(), *report.lines()]
+
+    # The job's connection holds the lock until the background task finishes.
+    background.add_task(job.run, run_sync, reraise=False)
+    return {"job_id": job.id}
+
+
 @router.get("/stats")
 def stats() -> dict:
     with db.connect() as conn:
@@ -115,6 +145,7 @@ def stats() -> dict:
             "SELECT count(*), max(start_at) FROM activity WHERE status = 'city'"
         ).fetchone()
         completion = metrics(conn).as_dict()
+        sync_runs = last_runs(conn, "sync")
         rows = conn.execute("""
             SELECT s.layer,
                    count(*) AS stored,
@@ -139,4 +170,12 @@ def stats() -> dict:
     }
     result["runs"] = {"city": runs, "latest_start_at": latest}
     result["completion"] = completion
+    latest_sync = sync_runs["latest"]
+    result["last_sync"] = {
+        "finished_at": sync_runs["last_ok"]["finished_at"] if sync_runs["last_ok"] else None,
+        "headline": sync_runs["last_ok"]["headline"] if sync_runs["last_ok"] else None,
+        "latest_status": latest_sync["status"] if latest_sync else None,
+        "latest_error": latest_sync["error"] if latest_sync else None,
+        "running": sync_runs["running"],
+    }
     return result
