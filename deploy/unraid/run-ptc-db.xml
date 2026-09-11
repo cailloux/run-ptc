@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>run-ptc-db</Name>
+  <Repository>pgrouting/pgrouting:17-3.5-4.0.1</Repository>
+  <Registry>https://hub.docker.com/r/pgrouting/pgrouting</Registry>
+  <Network>services</Network>
+  <MyIP/>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/cailloux/run-ptc</Support>
+  <Project>https://github.com/cailloux/run-ptc</Project>
+  <Overview>Run PTC database: Postgres 17 with PostGIS and pgRouting. Separate from the shared postgres container. No published port; run-ptc reaches it by name on the services network.</Overview>
+  <Category>Tools:</Category>
+  <WebUI/>
+  <TemplateURL/>
+  <Icon/>
+  <ExtraParams>--health-cmd='pg_isready -h 127.0.0.1 -U runptc -d runptc' --health-interval=30s --health-timeout=5s --health-retries=3</ExtraParams>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires/>
+  <Config Name="Data" Target="/var/lib/postgresql/data" Default="/mnt/user/appdata/run-ptc/pgdata" Mode="rw" Description="Postgres data directory." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/run-ptc/pgdata</Config>
+  <Config Name="POSTGRES_USER" Target="POSTGRES_USER" Default="runptc" Mode="" Description="" Type="Variable" Display="always" Required="true" Mask="false">runptc</Config>
+  <Config Name="POSTGRES_DB" Target="POSTGRES_DB" Default="runptc" Mode="" Description="" Type="Variable" Display="always" Required="true" Mask="false">runptc</Config>
+  <Config Name="POSTGRES_PASSWORD" Target="POSTGRES_PASSWORD" Default="" Mode="" Description="Choose a password; use the same one in run-ptc's DATABASE_URL." Type="Variable" Display="always" Required="true" Mask="true"/>
+</Container>
