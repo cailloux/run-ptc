@@ -33,6 +33,9 @@ class IntervalsClient:
         return self
 
     def __exit__(self, *exc):
+        self.close()
+
+    def close(self) -> None:
         self._http.close()
 
     def _get(self, path: str, params: dict) -> object:

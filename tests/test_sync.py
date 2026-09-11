@@ -92,6 +92,9 @@ class FakeIntervals:
         self.fetches.append(activity_id)
         return self._tracks[activity_id]
 
+    def close(self):
+        pass
+
 
 def run(activity_id, start="2024-05-04T12:00:00Z", **fields):
     return {"id": activity_id, "start_date": start, "type": "Run", "name": f"run {activity_id}",

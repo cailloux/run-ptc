@@ -34,6 +34,14 @@ def default_window(today: date, latest_start: datetime | None, backfill_start: d
     return latest_start.astimezone(EASTERN).date() - timedelta(days=OVERLAP_DAYS), today
 
 
+def sync_window(conn: psycopg.Connection, settings: Settings,
+                start: date | None = None, end: date | None = None) -> tuple[date, date]:
+    """The explicit dates a sync will ask for: the given ones, or the defaults."""
+    latest = conn.execute("SELECT max(start_at) FROM activity").fetchone()[0]
+    default_start, default_end = default_window(today_eastern(), latest, settings.sync_backfill_start)
+    return start or default_start, end or default_end
+
+
 def month_windows(start: date, end: date) -> list[tuple[date, date]]:
     """Split start..end (inclusive) into calendar-month windows."""
     windows = []
@@ -75,6 +83,12 @@ class SyncReport:
         if self.refetch and self.fetched:
             lines.append("refetched tracks can't remove hits from their old versions; run recompute")
         return lines
+
+    def headline(self) -> str:
+        """One line for the map panel."""
+        city = self.statuses["city"]
+        prefix = "dry run: " if self.dry_run else ""
+        return f"{prefix}{city} new city run{'' if city == 1 else 's'}, {self.newly_hit} nodes newly hit"
 
 
 UPSERT_SQL = """
