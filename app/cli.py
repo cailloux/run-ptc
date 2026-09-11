@@ -1,4 +1,4 @@
-"""Command line entry point: python -m app.cli {migrate,import,exclusions}."""
+"""Command line entry point: python -m app.cli <command>."""
 
 import argparse
 import logging
@@ -13,8 +13,23 @@ from app.arcgis import fetch_features
 from app.config import intervals_credentials, load_settings
 from app.importer import LAYERS, METERS_PER_MILE, import_layer
 from app.intervals import IntervalsClient
+from app.jobs import JobBusy, JobFn, start_job
 from app.matching import metrics, near_miss_lines, near_misses, recompute
-from app.sync import EASTERN, default_window, sync, today_eastern
+from app.sync import EASTERN, sync, sync_window
+
+
+def _run_job(job: str, fn: JobFn) -> int:
+    """Run a data job under the shared lock, recording it in job_run."""
+    with db.connect() as conn:
+        db.migrate(conn)
+    try:
+        lines = start_job(job, "cli").run(fn)
+    except JobBusy:
+        print("another job is running (sync, import, or recompute); try again when it finishes",
+              file=sys.stderr)
+        return 1
+    print("\n".join(lines))
+    return 0
 
 
 def cmd_migrate(args) -> int:
@@ -29,14 +44,17 @@ def cmd_import(args) -> int:
     # Validate exclusions before spending time on the download.
     excl = exclusions.load()
     names = [args.layer] if args.layer else list(LAYERS)
-    with db.connect() as conn, httpx.Client(timeout=120) as client:
-        db.migrate(conn)
-        for name in names:
-            layer = LAYERS[name]
-            features = fetch_features(client, layer.url, layer.oid_field)
-            report = import_layer(conn, layer, features, settings, excl)
-            print("\n".join(report.lines()))
-    return 0
+
+    def job(conn) -> list[str]:
+        lines = []
+        with httpx.Client(timeout=120) as client:
+            for name in names:
+                layer = LAYERS[name]
+                features = fetch_features(client, layer.url, layer.oid_field)
+                lines += import_layer(conn, layer, features, settings, excl).lines()
+        return lines
+
+    return _run_job("import", job)
 
 
 def cmd_exclusions(args) -> int:
@@ -51,19 +69,17 @@ def cmd_exclusions(args) -> int:
 def cmd_sync(args) -> int:
     settings = load_settings()
     athlete_id, api_key = intervals_credentials()
-    with db.connect() as conn:
-        db.migrate(conn)
-        latest = conn.execute("SELECT max(start_at) FROM activity").fetchone()[0]
-        start, end = default_window(today_eastern(), latest, settings.sync_backfill_start)
-        start, end = args.start or start, args.end or end
+
+    def job(conn) -> list[str]:
+        start, end = sync_window(conn, settings, args.start, args.end)
         if start > end:
-            print(f"--from {start} is after --to {end}", file=sys.stderr)
-            return 1
+            raise ValueError(f"--from {start} is after --to {end}")
         with IntervalsClient(athlete_id, api_key) as client:
             report = sync(conn, client, start, end, settings,
                           refetch=args.refetch, dry_run=args.dry_run)
-    print("\n".join(report.lines()))
-    return 0
+        return [report.headline(), *report.lines()]
+
+    return _run_job("sync", job)
 
 
 def cmd_activities(args) -> int:
@@ -81,29 +97,31 @@ def cmd_activities(args) -> int:
     return 0
 
 
-def _print_stats(conn) -> None:
-    print("\n".join(metrics(conn).lines()))
-    print("\n".join(near_miss_lines(near_misses(conn))))
+def _stats_lines(conn) -> list[str]:
+    return metrics(conn).lines() + near_miss_lines(near_misses(conn))
 
 
 def cmd_recompute(args) -> int:
     settings = load_settings()
-    with db.connect() as conn:
-        db.migrate(conn)
+
+    def job(conn) -> list[str]:
         started = time.monotonic()
         hit = recompute(conn, settings)
-        print(f"recompute: {hit} nodes hit in {time.monotonic() - started:.1f} s "
-              f"(radius: cart paths {settings.match_radius_cartpath_m} m, cart path ends "
-              f"{settings.match_radius_cartpath_end_m} m, roads "
-              f"{settings.match_radius_road_m} m, {', '.join(settings.match_radius_wide_road_classes)} "
-              f"{settings.match_radius_wide_m} m; gap split {settings.track_gap_split_m} m)")
-        _print_stats(conn)
-    return 0
+        return [
+            f"recompute: {hit} nodes hit in {time.monotonic() - started:.1f} s "
+            f"(radius: cart paths {settings.match_radius_cartpath_m} m, cart path ends "
+            f"{settings.match_radius_cartpath_end_m} m, roads {settings.match_radius_road_m} m, "
+            f"{', '.join(settings.match_radius_wide_road_classes)} {settings.match_radius_wide_m} m; "
+            f"gap split {settings.track_gap_split_m} m)",
+            *_stats_lines(conn),
+        ]
+
+    return _run_job("recompute", job)
 
 
 def cmd_stats(args) -> int:
     with db.connect() as conn:
-        _print_stats(conn)
+        print("\n".join(_stats_lines(conn)))
     return 0
 
 

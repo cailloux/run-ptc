@@ -22,6 +22,6 @@ def conn(db_url):
         # trip the JIT threshold and every query pays to compile (16 s suite vs
         # 4 s). On real data JIT makes no measurable difference either way.
         c.execute("SET jit = off")
-        c.execute("TRUNCATE segment, node, source_duplicate, activity, activity_piece"
+        c.execute("TRUNCATE segment, node, source_duplicate, activity, activity_piece, job_run"
                   " RESTART IDENTITY CASCADE")
         yield c
