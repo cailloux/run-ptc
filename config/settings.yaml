@@ -32,6 +32,7 @@ track_gap_split_m: 100
 # A node is hit when a run passes within its radius. Roads in the wide classes
 # get the wide radius because sidewalks sit farther from the centerline;
 # CLASS = Arterial is SR-74 and SR-54. Changes take effect on the next recompute.
-match_radius_m: 20
+match_radius_cartpath_m: 20
+match_radius_road_m: 20
 match_radius_wide_m: 30
 match_radius_wide_road_classes: [Arterial]

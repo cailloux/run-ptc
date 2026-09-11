@@ -37,8 +37,9 @@ def assign_radii(conn: psycopg.Connection, settings: Settings, *,
     conn.execute("""
         UPDATE node n
         SET radius_m = CASE
-            WHEN s.layer = 'road' AND s.seg_type = ANY(%(wide_classes)s) THEN %(wide_m)s
-            ELSE %(default_m)s
+            WHEN s.layer = 'cartpath' THEN %(cartpath_m)s
+            WHEN s.seg_type = ANY(%(wide_classes)s) THEN %(wide_m)s
+            ELSE %(road_m)s
         END
         FROM segment s
         WHERE s.id = n.segment_id
@@ -46,8 +47,9 @@ def assign_radii(conn: psycopg.Connection, settings: Settings, *,
           AND (NOT %(missing_only)s OR n.radius_m IS NULL)
     """, {
         "wide_classes": list(settings.match_radius_wide_road_classes),
+        "cartpath_m": settings.match_radius_cartpath_m,
+        "road_m": settings.match_radius_road_m,
         "wide_m": settings.match_radius_wide_m,
-        "default_m": settings.match_radius_m,
         "ids": segment_ids,
         "missing_only": missing_only,
     })
@@ -131,7 +133,8 @@ def match(conn: psycopg.Connection, settings: Settings, *,
         params = {
             "acts": activity_ids,
             "segs": segment_ids,
-            "max_r": max(settings.match_radius_m, settings.match_radius_wide_m),
+            "max_r": max(settings.match_radius_cartpath_m, settings.match_radius_road_m,
+                         settings.match_radius_wide_m),
         }
         conn.execute(_DIRECT_FROM_NODES if activity_ids is None else _DIRECT_FROM_RUNS, params)
         conn.execute(_TUNNELS, params)
@@ -226,7 +229,8 @@ def metrics(conn: psycopg.Connection) -> Metrics:
     return Metrics(cart_complete_m, cart_total_m, complete, total, road_covered_m, road_total_m)
 
 
-NEAR_MISS_BUCKETS = ("≤25 m", "≤30 m", "≤40 m", "≤60 m", "farther")
+NEAR_MISS_LIMITS_M = (10, 15, 20, 25, 30, 40, 60)
+NEAR_MISS_BUCKETS = tuple(f"<{m} m" for m in NEAR_MISS_LIMITS_M) + ("farther",)
 
 
 def near_misses(conn: psycopg.Connection) -> dict[str, dict[str, int]]:
@@ -235,24 +239,26 @@ def near_misses(conn: psycopg.Connection) -> dict[str, dict[str, int]]:
         WITH missed AS (
             SELECT s.layer,
                    (SELECT min(ST_Distance(n.geom, p.geom)) FROM activity_piece p
-                    WHERE ST_DWithin(n.geom, p.geom, 60)) AS d
+                    WHERE ST_DWithin(n.geom, p.geom, %(far)s)) AS d
             FROM node n JOIN segment s ON s.id = n.segment_id
             WHERE s.counted AND NOT s.excluded AND n.hit_at IS NULL
         )
-        SELECT layer,
-               CASE WHEN d <= 25 THEN 0 WHEN d <= 30 THEN 1 WHEN d <= 40 THEN 2
-                    WHEN d <= 60 THEN 3 ELSE 4 END AS bucket,
-               count(*)
+        -- width_bucket gives the index of the first limit >= d (1-based);
+        -- NULL (nothing within the last limit) lands in "farther".
+        SELECT layer, coalesce(width_bucket(d, %(limits)s::float8[]), %(n)s) AS bucket, count(*)
         FROM missed GROUP BY 1, 2
-    """).fetchall()
+    """, {"far": NEAR_MISS_LIMITS_M[-1],
+          "limits": [0.0, *map(float, NEAR_MISS_LIMITS_M)],
+          "n": len(NEAR_MISS_LIMITS_M) + 1}).fetchall()
     result = {layer: dict.fromkeys(NEAR_MISS_BUCKETS, 0) for layer in ("cartpath", "road")}
     for layer, bucket, n in rows:
-        result[layer][NEAR_MISS_BUCKETS[bucket]] = n
+        result[layer][NEAR_MISS_BUCKETS[min(bucket, len(NEAR_MISS_BUCKETS)) - 1]] += n
     return result
 
 
 def near_miss_lines(table: dict[str, dict[str, int]]) -> list[str]:
-    lines = ["missed nodes by distance to the nearest run:  " + "  ".join(f"{b:>7}" for b in NEAR_MISS_BUCKETS)]
+    lines = ["missed nodes by distance to the nearest run:",
+             "  " + " " * 9 + "".join(f"{b:>9}" for b in NEAR_MISS_BUCKETS)]
     for layer, counts in table.items():
-        lines.append(f"  {layer:<43}" + "  ".join(f"{counts[b]:>7}" for b in NEAR_MISS_BUCKETS))
+        lines.append(f"  {layer:<9}" + "".join(f"{counts[b]:>9}" for b in NEAR_MISS_BUCKETS))
     return lines

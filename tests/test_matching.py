@@ -64,9 +64,10 @@ def test_radius_by_layer_and_road_class(conn):
     ])
     assert radii(conn) == {"cartpath:1": 20, "road:1": 30, "road:2": 20}
 
-    tuned = dataclasses.replace(SETTINGS, match_radius_m=15, match_radius_wide_m=35)
+    tuned = dataclasses.replace(SETTINGS, match_radius_cartpath_m=5, match_radius_road_m=15,
+                                match_radius_wide_m=35)
     recompute(conn, tuned)
-    assert radii(conn) == {"cartpath:1": 15, "road:1": 35, "road:2": 15}
+    assert radii(conn) == {"cartpath:1": 5, "road:1": 35, "road:2": 15}
 
 
 def test_radius_boundary(conn):
@@ -249,5 +250,6 @@ def test_near_misses_bucket_missed_nodes_by_distance(conn):
     add_run(conn, "r", (-50, 0), (60, 0))
     recompute(conn, SETTINGS)
     assert near_misses(conn)["cartpath"] == {
-        "≤25 m": 2, "≤30 m": 0, "≤40 m": 0, "≤60 m": 2, "farther": 2}
+        "<10 m": 0, "<15 m": 0, "<20 m": 0, "<25 m": 2, "<30 m": 0, "<40 m": 0, "<60 m": 2,
+        "farther": 2}
     assert set(near_misses(conn)["road"].values()) == {0}
