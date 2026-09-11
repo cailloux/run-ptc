@@ -22,6 +22,7 @@ class Settings:
     sync_backfill_start: date
     track_gap_split_m: float
     match_radius_cartpath_m: float
+    match_radius_cartpath_end_m: float
     match_radius_road_m: float
     match_radius_wide_m: float
     match_radius_wide_road_classes: tuple[str, ...]

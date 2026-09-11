@@ -93,7 +93,8 @@ def cmd_recompute(args) -> int:
         started = time.monotonic()
         hit = recompute(conn, settings)
         print(f"recompute: {hit} nodes hit in {time.monotonic() - started:.1f} s "
-              f"(radius: cart paths {settings.match_radius_cartpath_m} m, roads "
+              f"(radius: cart paths {settings.match_radius_cartpath_m} m, cart path ends "
+              f"{settings.match_radius_cartpath_end_m} m, roads "
               f"{settings.match_radius_road_m} m, {', '.join(settings.match_radius_wide_road_classes)} "
               f"{settings.match_radius_wide_m} m; gap split {settings.track_gap_split_m} m)")
         _print_stats(conn)

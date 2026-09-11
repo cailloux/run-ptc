@@ -70,6 +70,38 @@ def test_radius_by_layer_and_road_class(conn):
     assert radii(conn) == {"cartpath:1": 5, "road:1": 35, "road:2": 15}
 
 
+def test_cartpath_end_nodes_get_their_own_radius_per_part(conn):
+    run_import(conn, "cartpath", [
+        cartpath(1, line((0, 0), (40, 0)), line((100, 0), (140, 0))),   # two parts, 3 nodes each
+        cartpath(2, line((0, 50), (10, 50))),                             # 2 nodes, both ends
+    ])
+    recompute(conn, dataclasses.replace(SETTINGS, match_radius_cartpath_m=5,
+                                        match_radius_cartpath_end_m=12))
+    rows = conn.execute("""
+        SELECT s.source_oid, n.part_idx, n.seq, n.radius_m FROM node n
+        JOIN segment s ON s.id = n.segment_id ORDER BY 1, 2, 3
+    """).fetchall()
+    assert rows == [
+        (1, 0, 0, 12), (1, 0, 1, 5), (1, 0, 2, 12),
+        (1, 1, 0, 12), (1, 1, 1, 5), (1, 1, 2, 12),
+        (2, 0, 0, 12), (2, 0, 1, 12),
+    ]
+
+
+def test_tight_radius_stops_crediting_the_path_beyond_a_junction(conn):
+    # A run passes the start of a side path without turning onto it: about
+    # 4.7 m from the path's end node and 14.3 m from the next node up.
+    run_import(conn, "cartpath", [cartpath(1, line((0, 0), (0, 60)))])
+    add_run(conn, "r", (-40, -8), (40, 18))
+    recompute(conn, SETTINGS)   # 20 m spills onto the second node
+    assert hits(conn, 1) == ["r", "r", None, None]
+
+    tight = dataclasses.replace(SETTINGS, match_radius_cartpath_m=10,
+                                match_radius_cartpath_end_m=10)
+    recompute(conn, tight)
+    assert hits(conn, 1) == ["r", None, None, None]
+
+
 def test_radius_boundary(conn):
     run_import(conn, "cartpath", [
         cartpath(1, line((0, 0), (40, 0))),

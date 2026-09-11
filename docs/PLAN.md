@@ -87,7 +87,9 @@ Tracks are stored permanently, both raw (`track_raw`, every fix in order) and sp
 
 ## Matching
 
-A node is hit when a run's track passes within the node's radius (`ST_DWithin`). Radius is set by class: 20 m for cart paths and most roads, 30 m for roads with `CLASS = Arterial`, where sidewalks sit farther from the centerline. In the city's data `Arterial` is SR-74 and SR-54 (124 segments, 28.3 mi) plus five 0.01 mi intersection stubs; it also catches 2 SR-54 segments that lack GDOT tags, which `DOT_RDTYPE = 1` would miss.
+A node is hit when a run's track passes within the node's radius (`ST_DWithin`). Radius is set by class: 10 m for cart paths, 20 m for most roads, and 30 m for roads with `CLASS = Arterial`, where sidewalks sit farther from the centerline.
+
+The cart path radius was tuned down from 20 m. GPS tracks sit close to the paths (93% of hits at 20 m came from within 5 m), and with nodes 20 m apart, a 20 m radius credited the second node up any side path you merely ran past. A 5 m trial removed those false hits but missed corner-cutting at junctions, so cart path end nodes (the first and last node of each part) have their own setting, `match_radius_cartpath_end_m`. Both are currently 10 m. In the city's data `Arterial` is SR-74 and SR-54 (124 segments, 28.3 mi) plus five 0.01 mi intersection stubs; it also catches 2 SR-54 segments that lack GDOT tags, which `DOT_RDTYPE = 1` would miss.
 
 Each node records the first run that hit it (`hit_activity_id`, which links to the run in Intervals) and that run's start time (`hit_at`). "First" means earliest by date, not first synced: matching a late-synced older run replaces a newer run's hit, and matching a newer run never replaces an older one.
 
@@ -207,4 +209,4 @@ Each phase can be verified on the map before the next builds on it. Routing come
 
 ## Tunable defaults
 
-State routes are counted. Node spacing is 20 m. Match radius is 20 m for cart paths and most roads, 30 m for roads with `CLASS = Arterial` (SR-74 and SR-54). Tracks split at gaps over 100 m. Tunnels require both ends in the same run. All of these live in config and take effect on the next `recompute`.
+State routes are counted. Node spacing is 20 m. Match radius is 10 m for cart paths (interior and end nodes set separately, both 10 m), 20 m for most roads, and 30 m for roads with `CLASS = Arterial` (SR-74 and SR-54). Tracks split at gaps over 100 m. Tunnels require both ends in the same run. All of these live in config and take effect on the next `recompute`.

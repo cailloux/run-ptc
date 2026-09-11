@@ -34,20 +34,29 @@ def rebuild_pieces(conn: psycopg.Connection, activity_ids: list[int] | None = No
 
 def assign_radii(conn: psycopg.Connection, settings: Settings, *,
                  segment_ids: list[int] | None = None, missing_only: bool = False) -> None:
+    # A cart path end node is the first or last node of its part.
     conn.execute("""
+        WITH part_end AS (
+            SELECT segment_id, part_idx, max(seq) AS last_seq FROM node
+            WHERE %(ids)s::bigint[] IS NULL OR segment_id = ANY(%(ids)s)
+            GROUP BY 1, 2
+        )
         UPDATE node n
         SET radius_m = CASE
+            WHEN s.layer = 'cartpath' AND n.seq IN (0, e.last_seq) THEN %(cartpath_end_m)s
             WHEN s.layer = 'cartpath' THEN %(cartpath_m)s
             WHEN s.seg_type = ANY(%(wide_classes)s) THEN %(wide_m)s
             ELSE %(road_m)s
         END
-        FROM segment s
+        FROM segment s, part_end e
         WHERE s.id = n.segment_id
+          AND e.segment_id = n.segment_id AND e.part_idx = n.part_idx
           AND (%(ids)s::bigint[] IS NULL OR s.id = ANY(%(ids)s))
           AND (NOT %(missing_only)s OR n.radius_m IS NULL)
     """, {
         "wide_classes": list(settings.match_radius_wide_road_classes),
         "cartpath_m": settings.match_radius_cartpath_m,
+        "cartpath_end_m": settings.match_radius_cartpath_end_m,
         "road_m": settings.match_radius_road_m,
         "wide_m": settings.match_radius_wide_m,
         "ids": segment_ids,
@@ -133,8 +142,8 @@ def match(conn: psycopg.Connection, settings: Settings, *,
         params = {
             "acts": activity_ids,
             "segs": segment_ids,
-            "max_r": max(settings.match_radius_cartpath_m, settings.match_radius_road_m,
-                         settings.match_radius_wide_m),
+            "max_r": max(settings.match_radius_cartpath_m, settings.match_radius_cartpath_end_m,
+                         settings.match_radius_road_m, settings.match_radius_wide_m),
         }
         conn.execute(_DIRECT_FROM_NODES if activity_ids is None else _DIRECT_FROM_RUNS, params)
         conn.execute(_TUNNELS, params)
