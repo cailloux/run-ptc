@@ -11,17 +11,17 @@ const NODE_MIN_ZOOM = 15;
 const SYNC_POLL_MS = 3000;
 
 // Coverage colors, validated with the dataviz palette checker against the
-// gray basemap: the three cart path hues are colorblind-safe as a set, and
-// line weight separates complete from partial as a second cue.
+// gray basemap: the three cart path hues are colorblind-safe as a set. Not
+// run is the heavy line on both layers, since that's where the focus goes.
 const STATE_STYLE = {
   cartpath: {
-    complete: { color: '#199e70', weight: 4 },
-    run: { color: '#1c5cab', weight: 3 },
-    not_run: { color: '#d95926', weight: 3 },
+    complete: { color: '#199e70', weight: 2.5 },
+    run: { color: '#1c5cab', weight: 2.5 },
+    not_run: { color: '#d95926', weight: 4 },
   },
   road: {
-    run: { color: '#5598e7', weight: 2 },
-    not_run: { color: '#8f8e89', weight: 1.5 },
+    run: { color: '#5598e7', weight: 1.5 },
+    not_run: { color: '#8f8e89', weight: 3 },
   },
   excluded: { color: '#5f5e5a', weight: 2.5, dashArray: '4 6' },
   uncounted: { color: '#cac9c4', weight: 1.5 },
@@ -109,9 +109,13 @@ async function loadNetwork(layer) {
 
 // ---- nodes --------------------------------------------------------------
 
+// Missed path nodes are white, missed street nodes light yellow (checked
+// distinct from white under color-vision deficiencies); both get a dark ring
+// so they read on any line color.
 const NODE_STYLE = {
   hit: { radius: 2, weight: 0, fillColor: '#333', fillOpacity: 0.75 },
   missed: { radius: 3.5, weight: 1.5, color: '#3a3936', fillColor: '#fff', fillOpacity: 1 },
+  missedRoad: { radius: 3, weight: 1.5, color: '#3a3936', fillColor: '#ffd84d', fillOpacity: 1 },
 };
 
 async function nodePopup(id) {
@@ -124,9 +128,9 @@ async function nodePopup(id) {
 // Node layers share the segments' canvas so they're clickable. Each layer
 // control entry toggles a wrapper; the nodes inside appear only when zoomed
 // in, and their data loads the first time the layer is turned on.
-function nodeLayer(urls) {
+function nodeLayer(urls, missedStyle = 'missed') {
   const inner = L.geoJSON(null, {
-    pointToLayer: (f, latlng) => L.circleMarker(latlng, NODE_STYLE[f.properties.hit ? 'hit' : 'missed']),
+    pointToLayer: (f, latlng) => L.circleMarker(latlng, NODE_STYLE[f.properties.hit ? 'hit' : missedStyle]),
     onEachFeature: (f, l) => {
       l.bindPopup('Loading…');
       l.on('popupopen', (e) => nodePopup(f.properties.id)
@@ -162,7 +166,7 @@ function nodeLayer(urls) {
 
 const nodeLayers = {
   'Missed cart path nodes': nodeLayer(['nodes?layer=cartpath&status=missed']),
-  'Missed road nodes': nodeLayer(['nodes?layer=road&status=missed']),
+  'Missed road nodes': nodeLayer(['nodes?layer=road&status=missed'], 'missedRoad'),
   'Hit nodes': nodeLayer(['nodes?layer=cartpath&status=hit', 'nodes?layer=road&status=hit']),
 };
 
@@ -318,6 +322,7 @@ document.getElementById('find').addEventListener('submit', (e) => {
 
   for (const [label, n] of Object.entries(nodeLayers)) overlays[label] = n.wrapper;
   nodeLayers['Missed cart path nodes'].wrapper.addTo(map);
+  nodeLayers['Missed road nodes'].wrapper.addTo(map);
   overlays['Run tracks'] = tracks;
   L.control.layers(null, overlays, { collapsed: false, position: 'bottomright' }).addTo(map);
 
