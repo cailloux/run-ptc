@@ -16,7 +16,7 @@ Single-user planning tool for running every cart path and road in Peachtree City
 
 ## Stack
 
-- Python 3.12, FastAPI, psycopg 3. Raw SQL for spatial queries; no ORM.
+- Python 3.14, FastAPI, psycopg 3. Raw SQL for spatial queries; no ORM. The Dockerfile's base image is the single source of the Python version; CI runs the tests inside that image.
 - Postgres with PostGIS and pgRouting via the `pgrouting/pgrouting` image. The stock `postgres` and `postgis/postgis` images lack pgRouting.
 - Plain SQL migrations in `db/migrations/`, numbered and applied in order.
 - Frontend: Leaflet with plain JS and no build step, served by FastAPI from `app/static/`. Load libraries from cdnjs.
@@ -83,7 +83,7 @@ Store timestamps in UTC. Display them in US Eastern. Dates passed to Intervals a
 
 ## Commands
 
-The dev Mac has no Docker or Python 3.12, so tests and the dev stack run on kirk over SSH.
+The dev Mac has no Docker or project Python, so tests and the dev stack run on kirk over SSH. `gh` is at `/opt/homebrew/bin/gh`.
 
 ```
 # run tests (syncs source to kirk, runs pytest on an internet-less network)
