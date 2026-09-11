@@ -28,7 +28,9 @@ Single-user planning tool for running every cart path and road in Peachtree City
 - Convert to EPSG:4326 only at the API boundary.
 - The city server can return UTM directly with `outSR=32616`.
 - GIST-index every geometry column.
-- Road features arrive as MultiLineString. Normalize them before generating nodes or routing edges.
+- Both layers contain MultiLineString features (141 counted cart paths, 23 roads), and the parts are often separated by real gaps. Store one segment per source feature as MultiLineString, but never let nodes, coverage intervals, or routing edges span parts. Work per part (`node.part_idx`).
+- Compute every length from geometry. Never read the city's length attributes (`LengthMile`, `LENGTH`, `Length`, `Shape.STLength()`).
+- Import clean-up (duplicates, slivers under 1 m, roads outside the city) is described in `docs/PLAN.md` under "Clean-up on import."
 
 ## External services
 
@@ -42,7 +44,7 @@ Single-user planning tool for running every cart path and road in Peachtree City
 
 ## Secrets and config
 
-- Secrets live in env vars only: `DATABASE_URL`, `INTERVALS_API_KEY`, `INTERVALS_ATHLETE_ID`. Commit `.env.example` with placeholders and never commit `.env`.
+- Secrets live in env vars only: `DATABASE_URL`, `INTERVALS_API_KEY`, `INTERVALS_ATHLETE_ID` on the app, and `POSTGRES_PASSWORD` on the db. Commit `.env.example` with placeholders and never commit `.env`.
 - Never put a key, token, or password in code, tests, fixtures, docs, or this file. A key once leaked through a CLAUDE.md in git history on another project.
 - Tunables (node spacing, match radii, gap-split threshold) live in `config/settings.yaml`.
 - Exclusions live in `config/exclusions.yaml`, using the format in `docs/PLAN.md`.
@@ -71,22 +73,31 @@ Store timestamps in UTC. Display them in US Eastern. Dates passed to Intervals a
 
 ## Deployment
 
-- The app runs in Docker on kirk (Unraid) and is reached on the local network.
-- `docker-compose.yml` defines two services: `db` and `app`.
-- Appdata path: `/mnt/user/appdata/cartpath-tracker/` (confirm before creating).
+- The app is called Run PTC. It runs in Docker on kirk (Unraid) and is reached on the local network. `ssh kirk` works from the dev Mac.
+- Kirk has no docker-compose. The two containers, `run-ptc` (app, host port 8010) and `run-ptc-db` (`pgrouting/pgrouting`, no published port), are Unraid templates in `deploy/unraid/`, on the `services` bridge network. Favor env vars for all config so it can be set in the Unraid Docker UI.
+- Appdata path: `/mnt/user/appdata/run-ptc/`. The db data is in `pgdata/`, the dev pair (`scripts/kirk-dev.sh`) in `dev/`, and the synced source for tests in `src/`.
+- The app applies pending migrations and reapplies exclusions on startup.
 - The app image has a `HEALTHCHECK` using curl against `/health`.
 - CI: GitHub Actions builds the image and pushes it to GHCR. Dependabot covers pip, Docker, and Actions.
 - Authelia and Traefik are not in v1. Don't add them unless asked.
 
 ## Commands
 
-Fill these in as Phase 1 sets them up:
+The dev Mac has no Docker or Python 3.12, so tests and the dev stack run on kirk over SSH.
 
 ```
-# start stack
-# apply migrations
+# run tests (syncs source to kirk, runs pytest on an internet-less network)
+scripts/kirk-test.sh
+# start or refresh the dev pair on kirk (http://kirk:8011)
+scripts/kirk-dev.sh
+# apply migrations (also automatic on app startup)
+ssh kirk docker exec run-ptc python -m app.cli migrate
 # import city layers
-# sync runs from Intervals.icu
-# recompute all matches
-# run tests
+ssh kirk docker exec run-ptc python -m app.cli import
+# reapply exclusions after editing config/exclusions.yaml
+ssh kirk docker exec run-ptc python -m app.cli exclusions
+# sync runs from Intervals.icu (Phase 2)
+# recompute all matches (Phase 3)
 ```
+
+Use `run-ptc-dev` in place of `run-ptc` to target the dev pair.

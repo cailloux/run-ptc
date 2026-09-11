@@ -1,0 +1,21 @@
+# Tunables. Changes take effect on the next import (and, from Phase 3, recompute).
+
+# Node spacing along each part of a counted segment. Actual spacing is this or
+# slightly less, so both endpoints land exactly on nodes.
+node_spacing_m: 20
+
+# Whole features shorter than this are dropped on import.
+min_segment_length_m: 1
+
+# Parts of a multipart feature shorter than this stay in the geometry for
+# routing but get no nodes.
+min_part_length_m: 1
+
+# Grid used to snap geometry before hashing, for dedupe and change detection.
+dedupe_grid_m: 0.01
+
+# Cart path Type values that count toward completion.
+cartpath_counted_types: [Path, Bridge, Tunnel]
+
+# Roads count only when their City attribute equals this.
+road_counted_city: PEACHTREE CITY
