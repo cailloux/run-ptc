@@ -27,14 +27,15 @@ body { font: 13px/1.4 system-ui, sans-serif; }
 .legend-note { color: #77766f; }
 .swatch { display: inline-block; width: 18px; height: 0; margin: 0 4px 3px 0; vertical-align: middle; }
 .swatch + .swatch, span + .swatch { margin-left: 8px; }
-.swatch.complete { border-top: 4px solid #199e70; }
-.swatch.cart-run { border-top: 3px solid #1c5cab; }
-.swatch.cart-not-run { border-top: 3px solid #d95926; }
-.swatch.road-run { border-top: 2px solid #5598e7; }
-.swatch.road-not-run { border-top: 2px solid #8f8e89; }
+.swatch.complete { border-top: 2.5px solid #199e70; }
+.swatch.cart-run { border-top: 2.5px solid #1c5cab; }
+.swatch.cart-not-run { border-top: 4px solid #d95926; }
+.swatch.road-run { border-top: 1.5px solid #5598e7; }
+.swatch.road-not-run { border-top: 3px solid #8f8e89; }
 .swatch.excluded { border-top: 3px dashed #5f5e5a; }
 .swatch.uncounted { border-top: 2px solid #cac9c4; }
 
 .dot { display: inline-block; border-radius: 50%; margin: 0 4px 1px 0; vertical-align: middle; box-sizing: border-box; }
 .dot.missed { width: 8px; height: 8px; background: #fff; border: 1.5px solid #3a3936; }
-.dot.hit { width: 5px; height: 5px; background: #333; margin-left: 8px; }
+.dot.missed-road { width: 7px; height: 7px; background: #ffd84d; border: 1.5px solid #3a3936; margin-left: 8px; }
+.dot.hit { width: 5px; height: 5px; background: #333; }
