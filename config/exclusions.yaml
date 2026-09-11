@@ -1,0 +1,15 @@
+# Segments that stay on the map, greyed out, but drop out of all totals.
+# Reapplied on every import, on app startup, and by `python -m app.cli exclusions`.
+#
+# cartpaths:
+#   - global_id: "{17F7645E-B49A-46BA-9BD6-4BFD4CFB5395}"
+#     reason: "Gated off"
+# roads:
+#   - name: "MEADE FIELD COMPLEX"      # every segment of this road
+#     reason: "Parking loop"
+#   - object_id: 1234                  # one segment; warns if the name no longer matches
+#     name: "TWIGGS COR"
+#     reason: "Gated"
+
+cartpaths: []
+roads: []
