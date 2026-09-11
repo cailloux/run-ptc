@@ -13,7 +13,8 @@
   <div id="map"></div>
   <div id="panel">
     <h1>Run PTC</h1>
-    <table id="stats"><tr><td>Loading…</td></tr></table>
+    <div id="completion">Loading…</div>
+    <table id="stats"></table>
     <form id="find">
       <input id="find-oid" type="number" placeholder="Cart path OBJECTID_1">
       <button>Find</button>
@@ -23,7 +24,8 @@
       <span class="swatch road"></span>Counted road<br>
       <span class="swatch uncounted"></span>Not counted
       <span class="swatch excluded"></span>Excluded<br>
-      Nodes show from zoom 15.
+      <span class="dot missed"></span>Missed node
+      <span class="dot hit"></span>Hit node (from zoom 15)
     </div>
   </div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"

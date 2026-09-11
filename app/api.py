@@ -1,9 +1,9 @@
 from typing import Literal
 
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, HTTPException, Response
 
 from app import db
-from app.importer import METERS_PER_MILE
+from app.matching import METERS_PER_MILE, metrics
 
 router = APIRouter()
 
@@ -48,18 +48,43 @@ def network(layer: LayerName) -> Response:
 
 
 @router.get("/nodes")
-def nodes(layer: LayerName) -> Response:
+def nodes(layer: LayerName, status: Literal["hit", "missed"] | None = None) -> Response:
+    """Node points with a hit flag. Details load per node from /nodes/{id}."""
     return _geojson("""
         SELECT json_build_object('type', 'FeatureCollection', 'features',
             coalesce(json_agg(json_build_object(
                 'type', 'Feature',
                 'geometry', ST_AsGeoJSON(ST_Transform(n.geom, 4326), 6)::json,
-                'properties', json_build_object(
-                    'segment_id', n.segment_id, 'part_idx', n.part_idx, 'seq', n.seq)
+                'properties', json_build_object('id', n.id, 'hit', n.hit_at IS NOT NULL)
             ) ORDER BY n.id), '[]'::json))::text
         FROM node n JOIN segment s ON s.id = n.segment_id
-        WHERE s.layer = %s
-    """, (layer,))
+        WHERE s.layer = %(layer)s
+          AND (%(status)s::text IS NULL OR (n.hit_at IS NOT NULL) = (%(status)s = 'hit'))
+    """, {"layer": layer, "status": status})
+
+
+@router.get("/nodes/{node_id}")
+def node_detail(node_id: int) -> dict:
+    with db.connect() as conn:
+        row = conn.execute("""
+            SELECT n.id, n.radius_m, n.part_idx, n.seq, s.layer, s.source_oid, s.name, s.seg_type,
+                   n.hit_at, a.intervals_id, a.name
+            FROM node n JOIN segment s ON s.id = n.segment_id
+            LEFT JOIN activity a ON a.id = n.hit_activity_id
+            WHERE n.id = %s
+        """, (node_id,)).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="no such node")
+    (nid, radius_m, part_idx, seq, layer, source_oid, seg_name, seg_type,
+     hit_at, intervals_id, run_name) = row
+    return {
+        "id": nid,
+        "radius_m": radius_m,
+        "segment": {"layer": layer, "source_oid": source_oid, "name": seg_name,
+                    "seg_type": seg_type, "part_idx": part_idx, "seq": seq},
+        "hit": None if hit_at is None else {
+            "start_at": hit_at, "intervals_id": intervals_id, "name": run_name},
+    }
 
 
 @router.get("/activities")
@@ -89,6 +114,7 @@ def stats() -> dict:
         runs, latest = conn.execute(
             "SELECT count(*), max(start_at) FROM activity WHERE status = 'city'"
         ).fetchone()
+        completion = metrics(conn).as_dict()
         rows = conn.execute("""
             SELECT s.layer,
                    count(*) AS stored,
@@ -112,4 +138,5 @@ def stats() -> dict:
         for layer, stored, counted, counted_m, excluded, excluded_m, node_count in rows
     }
     result["runs"] = {"city": runs, "latest_start_at": latest}
+    result["completion"] = completion
     return result
