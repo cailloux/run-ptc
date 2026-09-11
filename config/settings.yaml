@@ -28,3 +28,18 @@ sync_backfill_start: 2023-01-01
 
 # Tracks are split wherever consecutive GPS fixes are more than this far apart.
 track_gap_split_m: 100
+
+# A node is hit when a run passes within its radius. Changes take effect on the
+# next recompute.
+#
+# Cart paths: GPS tracks sit close to the paths (93% of hits at 20 m were within
+# 5 m), and a 20 m radius credited the second node up side paths you only ran
+# past. End nodes (the first and last node of each part) sit at junctions where
+# runners cut corners, so they have their own radius.
+match_radius_cartpath_m: 10
+match_radius_cartpath_end_m: 10
+# Roads in the wide classes get the wide radius because sidewalks sit farther
+# from the centerline; CLASS = Arterial is SR-74 and SR-54.
+match_radius_road_m: 20
+match_radius_wide_m: 30
+match_radius_wide_road_classes: [Arterial]

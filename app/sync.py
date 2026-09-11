@@ -14,6 +14,7 @@ import psycopg
 
 from app.config import Settings
 from app.intervals import IntervalsClient
+from app.matching import match, rebuild_pieces
 
 log = logging.getLogger(__name__)
 
@@ -56,19 +57,24 @@ class SyncReport:
     already: int = 0
     fetched: int = 0
     statuses: Counter = field(default_factory=Counter)   # city / outside / no_gps
+    newly_hit: int = 0
     dry_run: bool = False
+    refetch: bool = False
 
     def lines(self) -> list[str]:
         skipped = ", ".join(f"{t} {n}" for t, n in self.skipped_types.most_common()) or "none"
         prefix = "DRY RUN " if self.dry_run else ""
-        return [
+        lines = [
             f"{prefix}sync {self.start}..{self.end}: {self.listed} listed, {self.runs} runs; "
             f"other types skipped: {skipped}",
             f"runs: {self.fetched} fetched, {self.already} already synced, "
             f"{self.without_gps} without GPS, {len(self.strava_stubs)} Strava stubs",
             f"fetched: {self.statuses['city']} city, {self.statuses['outside']} outside, "
-            f"{self.statuses['no_gps']} with no usable track",
+            f"{self.statuses['no_gps']} with no usable track; {self.newly_hit} nodes newly hit",
         ]
+        if self.refetch and self.fetched:
+            lines.append("refetched tracks can't remove hits from their old versions; run recompute")
+        return lines
 
 
 UPSERT_SQL = """
@@ -106,7 +112,7 @@ ON CONFLICT (intervals_id) DO UPDATE SET
     track_raw = EXCLUDED.track_raw,
     geom = EXCLUDED.geom,
     synced_at = EXCLUDED.synced_at
-RETURNING status
+RETURNING id, status
 """
 
 
@@ -123,12 +129,13 @@ def _prepare(conn: psycopg.Connection) -> None:
         raise RuntimeError("no city segments; run the city import before syncing")
 
 
-def _store_run(conn: psycopg.Connection, activity: dict, points: list, gap_m: float) -> str:
+def _store_run(conn: psycopg.Connection, activity: dict, points: list, gap_m: float) -> tuple[int, str]:
+    """Upsert the run and recut its matching pieces. Returns (activity id, status)."""
     conn.execute("TRUNCATE sync_fix")
     with conn.cursor().copy("COPY sync_fix (seq, lat, lon) FROM STDIN") as copy:
         for seq, (lat, lon) in enumerate(points):
             copy.write_row((seq, lat, lon))
-    return conn.execute(UPSERT_SQL, {
+    activity_id, status = conn.execute(UPSERT_SQL, {
         "gap_m": gap_m,
         "intervals_id": activity["id"],
         "start_at": datetime.fromisoformat(activity["start_date"]),
@@ -136,17 +143,20 @@ def _store_run(conn: psycopg.Connection, activity: dict, points: list, gap_m: fl
         "name": activity.get("name"),
         "distance_m": activity.get("distance"),
         "source": activity.get("source"),
-    }).fetchone()[0]
+    }).fetchone()
+    rebuild_pieces(conn, [activity_id])
+    return activity_id, status
 
 
 def sync(conn: psycopg.Connection, client: IntervalsClient, start: date, end: date,
          settings: Settings, *, refetch: bool = False, dry_run: bool = False) -> SyncReport:
-    report = SyncReport(start, end, dry_run=dry_run)
+    report = SyncReport(start, end, dry_run=dry_run, refetch=refetch)
     _prepare(conn)
     known = {r[0] for r in conn.execute("SELECT intervals_id FROM activity")}
 
     for oldest, newest in month_windows(start, end):
         fetched_before = report.fetched
+        city_ids: list[int] = []
         # One transaction per month keeps a long backfill's progress if it
         # fails partway; a dry run rolls every month back.
         with conn.transaction(force_rollback=dry_run):
@@ -168,8 +178,13 @@ def sync(conn: psycopg.Connection, client: IntervalsClient, start: date, end: da
                     continue
                 points = [p for p in client.latlng(a["id"]) if p and p != (0.0, 0.0)]
                 report.fetched += 1
-                report.statuses[_store_run(conn, a, points, settings.track_gap_split_m)] += 1
+                activity_id, status = _store_run(conn, a, points, settings.track_gap_split_m)
+                report.statuses[status] += 1
+                if status == "city":
+                    city_ids.append(activity_id)
                 known.add(a["id"])
+            # Match only this month's new city runs; recompute replays everything.
+            report.newly_hit += match(conn, settings, activity_ids=city_ids)
         if report.fetched > fetched_before:
             log.info("%s: fetched %d runs", oldest.strftime("%Y-%m"), report.fetched - fetched_before)
 

@@ -18,5 +18,10 @@ def db_url():
 @pytest.fixture
 def conn(db_url):
     with db.connect(db_url) as c:
-        c.execute("TRUNCATE segment, node, source_duplicate, activity RESTART IDENTITY CASCADE")
+        # On tiny, never-analyzed fixture tables the planner's cost estimates
+        # trip the JIT threshold and every query pays to compile (16 s suite vs
+        # 4 s). On real data JIT makes no measurable difference either way.
+        c.execute("SET jit = off")
+        c.execute("TRUNCATE segment, node, source_duplicate, activity, activity_piece"
+                  " RESTART IDENTITY CASCADE")
         yield c

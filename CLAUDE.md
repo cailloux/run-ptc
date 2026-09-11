@@ -76,6 +76,7 @@ Store timestamps in UTC. Display them in US Eastern. Dates passed to Intervals a
 - The app is called Run PTC. It runs in Docker on kirk (Unraid) and is reached on the local network. `ssh kirk` works from the dev Mac.
 - Kirk has no docker-compose. The two containers, `run-ptc` (app, host port 8010) and `run-ptc-db` (`pgrouting/pgrouting`, no published port), are Unraid templates in `deploy/unraid/`, on the `services` bridge network. Favor env vars for all config so it can be set in the Unraid Docker UI.
 - Appdata path: `/mnt/user/appdata/run-ptc/`. The db data is in `pgdata/`, the dev pair (`scripts/kirk-dev.sh`) in `dev/`, and the synced source for tests in `src/`.
+- The dev pair (`run-ptc-dev` at http://192.168.50.2:8011, `run-ptc-dev-db`) is the standing development environment. Keep it running; don't tear it down after a phase. The user switches to the Unraid-managed containers manually.
 - The app applies pending migrations and reapplies exclusions on startup.
 - The app image has a `HEALTHCHECK` using curl against `/health`.
 - CI: GitHub Actions builds the image and pushes it to GHCR. Dependabot covers pip, Docker, and Actions.
@@ -101,7 +102,10 @@ ssh kirk docker exec run-ptc python -m app.cli exclusions
 ssh kirk docker exec run-ptc python -m app.cli sync
 # list synced runs, e.g. to check which were classified outside the city
 ssh kirk docker exec run-ptc python -m app.cli activities --status outside
-# recompute all matches (Phase 3)
+# re-split tracks, reassign radii, clear hits, and replay every run (after tuning settings)
+ssh kirk docker exec run-ptc python -m app.cli recompute
+# completion metrics and missed nodes by distance to the nearest run (read-only)
+ssh kirk docker exec run-ptc python -m app.cli stats
 ```
 
 Use `run-ptc-dev` in place of `run-ptc` to target the dev pair.

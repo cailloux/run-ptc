@@ -87,15 +87,21 @@ Tracks are stored permanently, both raw (`track_raw`, every fix in order) and sp
 
 ## Matching
 
-A node is hit when a run's track passes within the node's radius (`ST_DWithin` against the track, with GiST indexes on both). Radius is set by class: 20 m for cart paths and residential roads, 30 m for arterials and state routes, where sidewalks sit farther from the centerline. Each node records the first run that hit it and when.
+A node is hit when a run's track passes within the node's radius (`ST_DWithin`). Radius is set by class: 10 m for cart paths, 20 m for most roads, and 30 m for roads with `CLASS = Arterial`, where sidewalks sit farther from the centerline.
 
-Tunnel segments get one extra rule. If a single run hits both the first and last node of a Tunnel segment, every node in that tunnel is marked hit.
+The cart path radius was tuned down from 20 m. GPS tracks sit close to the paths (93% of hits at 20 m came from within 5 m), and with nodes 20 m apart, a 20 m radius credited the second node up any side path you merely ran past. A 5 m trial removed those false hits but missed corner-cutting at junctions, so cart path end nodes (the first and last node of each part) have their own setting, `match_radius_cartpath_end_m`. Both are currently 10 m. In the city's data `Arterial` is SR-74 and SR-54 (124 segments, 28.3 mi) plus five 0.01 mi intersection stubs; it also catches 2 SR-54 segments that lack GDOT tags, which `DOT_RDTYPE = 1` would miss.
 
-A `recompute` command clears all hits and replays every stored run. Tuning happens there: look at missed nodes along routes you know you ran, adjust the radius, and recompute.
+Each node records the first run that hit it (`hit_activity_id`, which links to the run in Intervals) and that run's start time (`hit_at`). "First" means earliest by date, not first synced: matching a late-synced older run replaces a newer run's hit, and matching a newer run never replaces an older one.
+
+Whole tracks usually span most of the city, so their bounding boxes can't narrow a spatial join. Matching runs against `activity_piece`, each city track cut into ~200 m pieces with a GiST index. A full match of every node takes a few seconds this way, against roughly two minutes on whole tracks.
+
+Tunnel segments get one extra rule. If a single run hits both the first and last node of a Tunnel segment, every node in that tunnel is credited to the earliest such run, unless a node already has an earlier direct hit.
+
+Matching is incremental. Sync matches only the city runs it just stored, and a city import matches only the segments whose nodes it regenerated. A `recompute` command re-splits every track with the current gap threshold, rebuilds the pieces, reassigns radii from the settings, clears all hits, and replays every stored run. Tuning happens there: look at missed nodes along routes you know you ran, adjust the radius, and recompute. `recompute` and `stats` also print missed nodes bucketed by distance to the nearest run, which shows how many a larger radius would pick up.
 
 Metrics:
 
-- **Cart path miles complete** (headline): the total length of counted, non-excluded cart path segments with every node hit, shown with the total and a percentage. Partial segments show on the map but add nothing, which matches Hard Mode.
+- **Cart path miles complete** (headline): the total length of counted, non-excluded cart path segments with every node hit, shown with the total and a percentage. A segment with no nodes is never complete. Partial segments show on the map but add nothing, which matches Hard Mode.
 - **Segments complete:** a count, shown alongside the headline.
 - **Road miles covered:** the length of node-to-node intervals, within a single part, where both nodes are hit.
 
@@ -189,10 +195,18 @@ Build the graph, review islands, then add click-to-route, retrace, undo/redo, di
 
 ### Phase 6: Automation
 
-Add the nightly sync and the monthly city refresh with its change report.
+Add the nightly sync and the monthly city refresh with its change report. Record every job run (start, finish, status, summary, error) in a job log. Schedule jobs so they check daily whether there's anything to do and only work when their data is out of date: the city refresh imports only when the layers have changed or a month has passed. That way a failed run retries itself the next day.
+
+### Phase 7: Admin and data health
+
+Modeled on the Plane States admin page, minus its auth:
+
+- A status page per data source (city layers, Intervals sync): last success, last attempt, last error, record counts, and a stale or current flag, with buttons to run a job now and refresh.
+- Alerts on failures and staleness, sent only after a grace period and at most once per stale episode, with a stored marker preventing repeats. Each alert includes the last error and what to do. A failure to send an alert never breaks the job, and a "send test alert" button proves the alert path works. The channel (SMTP, ntfy, Pushover, a Discord webhook, or Apprise, which covers them all) is to be decided, since Cloudflare Email Routing isn't available on kirk.
+- Freshness on the map: a banner when data is stale or the last job failed, and a layer highlighting the segments the last city refresh added or changed.
 
 Each phase can be verified on the map before the next builds on it. Routing comes last because it doesn't depend on coverage, and graph topology is the fiddliest part to get right.
 
 ## Tunable defaults
 
-State routes are counted. Node spacing is 20 m. Match radius is 20 m for cart paths and residential roads, 30 m for arterials and state routes. Tracks split at gaps over 100 m. Tunnels require both ends in the same run. All of these live in config and take effect on the next `recompute`.
+State routes are counted. Node spacing is 20 m. Match radius is 10 m for cart paths (interior and end nodes set separately, both 10 m), 20 m for most roads, and 30 m for roads with `CLASS = Arterial` (SR-74 and SR-54). Tracks split at gaps over 100 m. Tunnels require both ends in the same run. All of these live in config and take effect on the next `recompute`.

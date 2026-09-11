@@ -21,12 +21,17 @@ class Settings:
     sync_run_types: tuple[str, ...]
     sync_backfill_start: date
     track_gap_split_m: float
+    match_radius_cartpath_m: float
+    match_radius_cartpath_end_m: float
+    match_radius_road_m: float
+    match_radius_wide_m: float
+    match_radius_wide_road_classes: tuple[str, ...]
 
 
 def load_settings(path: Path = CONFIG_DIR / "settings.yaml") -> Settings:
     data = yaml.safe_load(path.read_text())
-    data["cartpath_counted_types"] = tuple(data["cartpath_counted_types"])
-    data["sync_run_types"] = tuple(data["sync_run_types"])
+    for key in ("cartpath_counted_types", "sync_run_types", "match_radius_wide_road_classes"):
+        data[key] = tuple(data[key])
     if isinstance(data.get("sync_backfill_start"), str):
         data["sync_backfill_start"] = date.fromisoformat(data["sync_backfill_start"])
     # Unknown or missing keys raise TypeError, so typos fail loudly.
