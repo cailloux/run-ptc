@@ -14,10 +14,9 @@ import psycopg
 
 from app import exclusions as excl
 from app.config import Settings
+from app.matching import METERS_PER_MILE, assign_radii, match
 
 log = logging.getLogger(__name__)
-
-METERS_PER_MILE = 1609.344
 
 
 @dataclass(frozen=True)
@@ -128,6 +127,7 @@ WHERE s.id = ANY(%(ids)s) AND s.counted AND ST_Length(d.geom) >= %(min_part)s
 
 
 def regenerate_nodes(conn: psycopg.Connection, segment_ids: list[int], settings: Settings) -> None:
+    """Replace the nodes of these segments and match them against every stored run."""
     if not segment_ids:
         return
     conn.execute("DELETE FROM node WHERE segment_id = ANY(%s)", (segment_ids,))
@@ -136,6 +136,8 @@ def regenerate_nodes(conn: psycopg.Connection, segment_ids: list[int], settings:
         "spacing": settings.node_spacing_m,
         "min_part": settings.min_part_length_m,
     })
+    assign_radii(conn, settings, segment_ids=segment_ids)
+    match(conn, settings, segment_ids=segment_ids)
 
 
 def import_layer(conn: psycopg.Connection, layer: Layer, features: list[dict],

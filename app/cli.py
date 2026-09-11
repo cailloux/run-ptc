@@ -3,6 +3,7 @@
 import argparse
 import logging
 import sys
+import time
 from datetime import date
 
 import httpx
@@ -12,6 +13,7 @@ from app.arcgis import fetch_features
 from app.config import intervals_credentials, load_settings
 from app.importer import LAYERS, METERS_PER_MILE, import_layer
 from app.intervals import IntervalsClient
+from app.matching import metrics, near_miss_lines, near_misses, recompute
 from app.sync import EASTERN, default_window, sync, today_eastern
 
 
@@ -79,6 +81,31 @@ def cmd_activities(args) -> int:
     return 0
 
 
+def _print_stats(conn) -> None:
+    print("\n".join(metrics(conn).lines()))
+    print("\n".join(near_miss_lines(near_misses(conn))))
+
+
+def cmd_recompute(args) -> int:
+    settings = load_settings()
+    with db.connect() as conn:
+        db.migrate(conn)
+        started = time.monotonic()
+        hit = recompute(conn, settings)
+        print(f"recompute: {hit} nodes hit in {time.monotonic() - started:.1f} s "
+              f"(radius {settings.match_radius_m} m, {settings.match_radius_wide_m} m for "
+              f"{', '.join(settings.match_radius_wide_road_classes)}; "
+              f"gap split {settings.track_gap_split_m} m)")
+        _print_stats(conn)
+    return 0
+
+
+def cmd_stats(args) -> int:
+    with db.connect() as conn:
+        _print_stats(conn)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     # httpx logs every request at INFO; a backfill makes hundreds.
@@ -102,6 +129,9 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("activities", help="list synced activities")
     p.add_argument("--status", choices=["city", "outside", "no_gps"])
     p.set_defaults(func=cmd_activities)
+    sub.add_parser("recompute", help="clear all hits and replay every stored run").set_defaults(
+        func=cmd_recompute)
+    sub.add_parser("stats", help="completion metrics and near misses").set_defaults(func=cmd_stats)
     args = parser.parse_args(argv)
     try:
         return args.func(args)

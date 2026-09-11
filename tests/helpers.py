@@ -19,6 +19,9 @@ SETTINGS = Settings(
     sync_run_types=("Run", "TrailRun"),
     sync_backfill_start=date(2023, 1, 1),
     track_gap_split_m=100,
+    match_radius_m=20,
+    match_radius_wide_m=30,
+    match_radius_wide_road_classes=("Arterial",),
 )
 
 
