@@ -120,6 +120,7 @@ const NODE_STYLE = {
 
 async function nodePopup(id) {
   const d = await getJson(`nodes/${id}`);
+  if (!d.hit && d.segment.layer === 'road') return escapeHtml(d.segment.name ?? 'Unnamed road');
   if (!d.hit) return `Missed · radius ${d.radius_m} m`;
   const date = formatEastern(d.hit.start_at, { dateStyle: 'medium' });
   return `${escapeHtml(date)} · ${escapeHtml(d.hit.name ?? '')}<br>${intervalsLink(d.hit.intervals_id)}`;
