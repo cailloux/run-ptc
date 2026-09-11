@@ -59,7 +59,9 @@ segment          id, layer (cartpath | road), source_key, source_oid, name, seg_
                  geom_hash, props, geom (MultiLineString)
 source_duplicate layer, dropped_key, canonical_key
 node             id, segment_id, part_idx, seq, radius_m, hit_activity_id, hit_at, geom
-activity         id, intervals_id, start_at, sport, distance_m, geom (MultiLineString)
+activity         id, intervals_id, start_at, sport, name, distance_m, source, status
+                 (city | outside | no_gps), track_raw (LineString), geom (MultiLineString),
+                 synced_at
 route_edge       id, source, target, cost, reverse_cost, segment_id, geom
 ```
 
@@ -73,11 +75,15 @@ Nodes are generated along each part of each counted segment, evenly spaced at 20
 
 ## Activity sync
 
-The sync job lists activities from Intervals.icu by date range, keeps outdoor runs (Run and TrailRun; verify the exact type names in the Intervals OpenAPI spec), and skips anything without GPS. For each run it fetches the lat/lon stream, builds a line, and discards it if it doesn't intersect the city's bounding box. The initial backfill runs in monthly chunks. After that, a nightly job and a "Sync now" button pick up new runs.
+The sync job lists activities from Intervals.icu by date range, keeps outdoor runs (types `Run` and `TrailRun`, per the Intervals OpenAPI spec; `VirtualRun` is left out), and skips anything without GPS. A run has GPS when its `stream_types` includes `latlng`, so treadmill runs are skipped without fetching anything. For each run it fetches the `latlng` stream (latitudes in `data`, longitudes in `data2`), builds a line, splits it at gaps, and discards the track if no part intersects the city's bounding box (the extent of every imported segment). The initial backfill runs in monthly chunks. After that, a nightly job and a "Sync now" button pick up new runs.
 
-Tracks are split wherever consecutive points are more than 100 m apart. Without this, a GPS jump or a pause-and-resume draws a straight line across town and credits nodes you never ran. Tunnels are handled by their own rule, so splitting doesn't cost you tunnel credit.
+Every date sent to Intervals is explicit: each month window sends `oldest=YYYY-MM-DD` and `newest=YYYY-MM-DDT23:59:59`. By default a sync resumes a week before the newest stored run and ends today in US Eastern; with nothing stored it starts at `sync_backfill_start`.
 
-Tracks are stored permanently. That makes matching recomputable whenever the radius, node spacing, or city data changes.
+Every GPS run gets an `activity` row, so repeated syncs never refetch its stream, but tracks are stored only for city runs (`status = city`). Intervals serves Strava-sourced activities as empty stubs with no GPS; sync reports them loudly and stores nothing. As of Sept 2026 the backfill finds 551 runs: 532 with GPS, 328 in the city, and no Strava stubs.
+
+Tracks are split wherever consecutive points are more than 100 m apart. Without this, a GPS jump or a pause-and-resume draws a straight line across town and credits nodes you never ran. The split happens before the city test, so a GPS jump across the city can't pull in an outside run. Tunnels are handled by their own rule, so splitting doesn't cost you tunnel credit.
+
+Tracks are stored permanently, both raw (`track_raw`, every fix in order) and split (`geom`). That makes matching recomputable whenever the radius, node spacing, gap threshold, or city data changes; splitting is the SQL function `split_track(track, gap_m)`.
 
 ## Matching
 

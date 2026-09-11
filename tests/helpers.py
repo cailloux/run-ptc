@@ -1,6 +1,8 @@
 """Hand-built fixtures in UTM 16N. Coordinates are offsets in meters from an
 origin inside Peachtree City, so expected node positions are easy to read."""
 
+from datetime import date
+
 from app.config import Settings
 from app.exclusions import Exclusions
 from app.importer import LAYERS, import_layer
@@ -14,6 +16,9 @@ SETTINGS = Settings(
     dedupe_grid_m=0.01,
     cartpath_counted_types=("Path", "Bridge", "Tunnel"),
     road_counted_city="PEACHTREE CITY",
+    sync_run_types=("Run", "TrailRun"),
+    sync_backfill_start=date(2023, 1, 1),
+    track_gap_split_m=100,
 )
 
 

@@ -96,7 +96,11 @@ ssh kirk docker exec run-ptc python -m app.cli migrate
 ssh kirk docker exec run-ptc python -m app.cli import
 # reapply exclusions after editing config/exclusions.yaml
 ssh kirk docker exec run-ptc python -m app.cli exclusions
-# sync runs from Intervals.icu (Phase 2)
+# sync runs from Intervals.icu (default: a week before the newest run through today;
+# add --from/--to YYYY-MM-DD, --dry-run, or --refetch)
+ssh kirk docker exec run-ptc python -m app.cli sync
+# list synced runs, e.g. to check which were classified outside the city
+ssh kirk docker exec run-ptc python -m app.cli activities --status outside
 # recompute all matches (Phase 3)
 ```
 
