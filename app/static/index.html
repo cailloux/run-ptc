@@ -14,18 +14,37 @@
   <div id="panel">
     <h1>Run PTC</h1>
     <div id="completion">Loading…</div>
+    <div id="sync">
+      <div id="sync-status"></div>
+      <button id="sync-now" disabled>Sync now</button>
+    </div>
     <table id="stats"></table>
     <form id="find">
       <input id="find-oid" type="number" placeholder="Cart path OBJECTID_1">
       <button>Find</button>
     </form>
     <div id="legend">
-      <span class="swatch cartpath"></span>Counted cart path
-      <span class="swatch road"></span>Counted road<br>
-      <span class="swatch uncounted"></span>Not counted
-      <span class="swatch excluded"></span>Excluded<br>
-      <span class="dot missed"></span>Missed node
-      <span class="dot hit"></span>Hit node (from zoom 15)
+      <div>
+        <span class="swatch complete"></span>Complete cart path
+      </div>
+      <div>
+        <span class="swatch cart-run"></span>Run
+        <span class="swatch cart-not-run"></span>Not run
+        <span class="legend-note">(cart path, incomplete)</span>
+      </div>
+      <div>
+        <span class="swatch road-run"></span>Road run
+        <span class="swatch road-not-run"></span>Road not run
+      </div>
+      <div>
+        <span class="swatch excluded"></span>Excluded
+        <span class="swatch uncounted"></span>Not counted
+      </div>
+      <div>
+        <span class="dot missed"></span>Missed node
+        <span class="dot hit"></span>Hit node
+        <span class="legend-note">(from zoom 15)</span>
+      </div>
     </div>
   </div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"
