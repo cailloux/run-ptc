@@ -18,5 +18,5 @@ def db_url():
 @pytest.fixture
 def conn(db_url):
     with db.connect(db_url) as c:
-        c.execute("TRUNCATE segment, node, source_duplicate RESTART IDENTITY CASCADE")
+        c.execute("TRUNCATE segment, node, source_duplicate, activity RESTART IDENTITY CASCADE")
         yield c

@@ -19,3 +19,12 @@ cartpath_counted_types: [Path, Bridge, Tunnel]
 
 # Roads count only when their City attribute equals this.
 road_counted_city: PEACHTREE CITY
+
+# Intervals.icu activity types synced as runs. VirtualRun (treadmill apps) is left out.
+sync_run_types: [Run, TrailRun]
+
+# First date the initial backfill asks Intervals for. The earliest run is from 2023.
+sync_backfill_start: 2023-01-01
+
+# Tracks are split wherever consecutive GPS fixes are more than this far apart.
+track_gap_split_m: 100

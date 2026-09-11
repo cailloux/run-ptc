@@ -3,13 +3,16 @@
 import argparse
 import logging
 import sys
+from datetime import date
 
 import httpx
 
 from app import db, exclusions
 from app.arcgis import fetch_features
-from app.config import load_settings
-from app.importer import LAYERS, import_layer
+from app.config import intervals_credentials, load_settings
+from app.importer import LAYERS, METERS_PER_MILE, import_layer
+from app.intervals import IntervalsClient
+from app.sync import EASTERN, default_window, sync, today_eastern
 
 
 def cmd_migrate(args) -> int:
@@ -43,8 +46,43 @@ def cmd_exclusions(args) -> int:
     return 0
 
 
+def cmd_sync(args) -> int:
+    settings = load_settings()
+    athlete_id, api_key = intervals_credentials()
+    with db.connect() as conn:
+        db.migrate(conn)
+        latest = conn.execute("SELECT max(start_at) FROM activity").fetchone()[0]
+        start, end = default_window(today_eastern(), latest, settings.sync_backfill_start)
+        start, end = args.start or start, args.end or end
+        if start > end:
+            print(f"--from {start} is after --to {end}", file=sys.stderr)
+            return 1
+        with IntervalsClient(athlete_id, api_key) as client:
+            report = sync(conn, client, start, end, settings,
+                          refetch=args.refetch, dry_run=args.dry_run)
+    print("\n".join(report.lines()))
+    return 0
+
+
+def cmd_activities(args) -> int:
+    with db.connect() as conn:
+        rows = conn.execute("""
+            SELECT start_at, intervals_id, status, sport, distance_m, name
+            FROM activity WHERE %(status)s::text IS NULL OR status = %(status)s
+            ORDER BY start_at
+        """, {"status": args.status}).fetchall()
+    for start_at, intervals_id, status, sport, distance_m, name in rows:
+        miles = f"{(distance_m or 0) / METERS_PER_MILE:5.2f} mi"
+        local = start_at.astimezone(EASTERN).strftime("%Y-%m-%d %H:%M")
+        print(f"{local}  {intervals_id:>12}  {status:7}  {sport:8}  {miles}  {name or ''}")
+    print(f"{len(rows)} activities")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+    # httpx logs every request at INFO; a backfill makes hundreds.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     parser = argparse.ArgumentParser(prog="python -m app.cli")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("migrate", help="apply pending migrations").set_defaults(func=cmd_migrate)
@@ -53,6 +91,17 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(func=cmd_import)
     sub.add_parser("exclusions", help="reapply config/exclusions.yaml").set_defaults(
         func=cmd_exclusions)
+    p = sub.add_parser("sync", help="sync runs from Intervals.icu (read-only)")
+    p.add_argument("--from", dest="start", type=date.fromisoformat, metavar="YYYY-MM-DD",
+                   help="default: a week before the newest stored run, or sync_backfill_start")
+    p.add_argument("--to", dest="end", type=date.fromisoformat, metavar="YYYY-MM-DD",
+                   help="default: today in US Eastern")
+    p.add_argument("--refetch", action="store_true", help="refetch streams for runs already stored")
+    p.add_argument("--dry-run", action="store_true", help="fetch and classify, but store nothing")
+    p.set_defaults(func=cmd_sync)
+    p = sub.add_parser("activities", help="list synced activities")
+    p.add_argument("--status", choices=["city", "outside", "no_gps"])
+    p.set_defaults(func=cmd_activities)
     args = parser.parse_args(argv)
     try:
         return args.func(args)
