@@ -66,3 +66,8 @@ route_snap_max_m: 50
 # alongside (within the road's match radius), so routes take the path.
 # Running the path still completes the road. Distances shown stay true.
 route_parallel_road_factor: 3
+
+# A data source (Intervals sync, city data) is stale when its last success is
+# older than this. Nightly runs are 24 h apart, so one skipped night stays
+# quiet and a second one alerts. (A failed run alerts right away.)
+stale_after_hours: 36

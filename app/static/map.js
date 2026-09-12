@@ -80,30 +80,17 @@ function segmentPopup(f) {
   if (p.uncounted_reason === 'second carriageway') {
     head = 'Second carriageway: shows the other side\'s coverage';
   }
+  if (p.changed_at) {
+    rows.push([`City ${p.city_change === 'added' ? 'added' : 'changed'}`,
+      formatEastern(p.changed_at, { dateStyle: 'medium' })]);
+  }
   return `<b>${escapeHtml(head)}</b><br>`
     + rows.map(([k, v]) => `<b>${k}</b> ${escapeHtml(String(v))}`).join('<br>');
-}
-
-function escapeHtml(s) {
-  return s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-}
-
-function formatEastern(iso, opts = { dateStyle: 'medium', timeStyle: 'short' }) {
-  return new Date(iso).toLocaleString('en-US', { timeZone: 'America/New_York', ...opts });
 }
 
 function intervalsLink(intervalsId) {
   const url = `https://intervals.icu/activities/${encodeURIComponent(intervalsId)}`;
   return `<a href="${url}" target="_blank" rel="noopener">Open in Intervals</a>`;
-}
-
-async function getJson(url, options) {
-  const resp = await fetch(url, options);
-  if (!resp.ok) {
-    const body = await resp.json().catch(() => ({}));
-    throw new Error(body.detail ?? `${url}: ${resp.status}`);
-  }
-  return resp.json();
 }
 
 const overlays = {};
@@ -238,6 +225,32 @@ islands.on('add', () => {
 });
 let tracksRequested = false;
 
+// ---- latest city changes -------------------------------------------------
+
+// Segments from each layer's latest city change, drawn as a wide highlighter
+// band in a pane beneath the coverage lines so their colors stay true. The
+// yellow was checked with the dataviz palette validator: no pairing with the
+// coverage colors is closer under color-vision deficiencies than the coverage
+// colors' own closest pair. Not clickable (the lines above take the clicks,
+// and their popups say when the city changed them). Off by default;
+// #changes turns it on.
+map.createPane('changes').style.zIndex = 390;   // just below overlayPane (400)
+const CHANGE_STYLE = { color: '#e8c547', weight: 12, opacity: 1, interactive: false };
+const changes = L.geoJSON(null, {
+  pane: 'changes',
+  renderer: L.canvas({ pane: 'changes' }),
+  style: CHANGE_STYLE,
+});
+let changesRequested = false;
+changes.on('add', () => {
+  if (changesRequested) return;
+  changesRequested = true;
+  getJson('changes').then((fc) => {
+    changes.addData(fc);
+    if (!fc.features.length) alert('The city hasn\'t changed anything since the first import.');
+  }).catch((err) => alert(err.message));
+});
+
 async function loadTracks() {
   const fc = await getJson('activities');
   tracks.clearLayers();
@@ -290,14 +303,37 @@ function renderSync(s) {
     lines.push('Never synced');
   }
   if (!s.running && s.latest?.status === 'failed') {
-    lines.push(`<span class="error">Last attempt failed: ${escapeHtml(s.latest.error ?? '')}</span>`);
+    lines.push(`<span class="error">Last attempt failed: ${escapeHtml(briefError(s.latest.error))}</span>`);
   }
   syncStatus.innerHTML = lines.join('<br>');
   syncButton.disabled = s.running;
 }
 
+// ---- freshness banner -------------------------------------------------------
+
+// Shown when a data source is failing or stale, or the nightly script is
+// overdue; details are on the status page.
+async function loadBanner() {
+  const s = await getJson('status');
+  const problems = Object.values(s.sources).filter((src) => src.problem).map((src) => ({
+    level: src.state === 'failing' ? 'failing' : 'stale',
+    text: src.state === 'failing' && src.latest
+      ? `${src.problem} (${formatEastern(src.latest.finished_at)})` : src.problem,
+  }));
+  if (s.nightly.overdue) {
+    problems.push({ level: 'stale', text: `The nightly script hasn't run since ${formatEastern(s.nightly.last_run)}` });
+  }
+  const banner = document.getElementById('banner');
+  banner.hidden = !problems.length;
+  banner.className = problems.some((p) => p.level === 'failing') ? 'failing' : 'stale';
+  banner.innerHTML = problems.map((p) => `<div><span class="icon" aria-hidden="true">${
+    p.level === 'failing' ? '✕' : '!'}</span>${escapeHtml(p.text)}</div>`).join('')
+    + '<a href="status.html">Status page</a>';
+}
+
 async function refreshAll() {
   await Promise.all([
+    loadBanner(),
     loadStats(),
     loadNetwork('cartpath'),
     loadNetwork('road'),
@@ -369,14 +405,17 @@ document.getElementById('find').addEventListener('submit', (e) => {
   nodeLayers['Missed road nodes'].wrapper.addTo(map);
   overlays['Run tracks'] = tracks;
   overlays['Graph islands'] = islands;
+  overlays['Latest city changes'] = changes;
   L.control.layers(null, overlays, { collapsed: false, position: 'bottomright' }).addTo(map);
 
   const s = await getJson('sync');
   renderSync(s);
   if (s.running) pollSync();   // e.g. a CLI sync already in progress
+  loadBanner().catch((err) => console.error(err));
 
   // Link to a feature with #oid=12062; add &tracks to show run tracks.
   const linked = location.hash.match(/oid=(\d+)/);
   if (linked) findCartpath(Number(linked[1]));
   if (/\btracks\b/.test(location.hash)) tracks.addTo(map);
+  if (/\bchanges\b/.test(location.hash)) changes.addTo(map);
 })().catch((err) => alert(err.message));

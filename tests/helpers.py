@@ -28,6 +28,7 @@ SETTINGS = Settings(
     route_snap_max_m=50,
     divided_roads=("DIVIDED RD",),
     route_parallel_road_factor=3,
+    stale_after_hours=36,
 )
 
 

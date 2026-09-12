@@ -4,11 +4,11 @@ import argparse
 import logging
 import sys
 import time
-from datetime import date
+from datetime import UTC, date, datetime
 
 import httpx
 
-from app import db, exclusions
+from app import db, exclusions, health
 from app.arcgis import layer_signature
 from app.config import intervals_credentials, load_settings
 from app.graph import build_graph
@@ -24,12 +24,12 @@ from app.sync import EASTERN, sync, sync_window
 EXIT_BUSY = 75   # EX_TEMPFAIL: another job holds the lock; try again later
 
 
-def _run_job(job: str, fn: JobFn) -> int:
+def _run_job(args, job: str, fn: JobFn) -> int:
     """Run a data job under the shared lock, recording it in job_run."""
     with db.connect() as conn:
         db.migrate(conn)
     try:
-        running = start_job(job, "cli")
+        running = start_job(job, args.trigger)
     except JobBusy:
         print("another job is running (sync, import, refresh, or recompute); try again when it finishes",
               file=sys.stderr)
@@ -76,7 +76,7 @@ def cmd_import(args) -> int:
             store_signature(conn, name, sig)
         return lines
 
-    return _run_job("import", job)
+    return _run_job(args, "import", job)
 
 
 def cmd_refresh(args) -> int:
@@ -87,12 +87,12 @@ def cmd_refresh(args) -> int:
         with httpx.Client(timeout=120) as client:
             return refresh(conn, client, settings, excl, force=args.force).lines()
 
-    return _run_job("refresh", job)
+    return _run_job(args, "refresh", job)
 
 
 def cmd_graph(args) -> int:
     settings = load_settings()
-    return _run_job("graph", lambda conn: build_graph(conn, settings).lines())
+    return _run_job(args, "graph", lambda conn: build_graph(conn, settings).lines())
 
 
 def cmd_exclusions(args) -> int:
@@ -117,7 +117,7 @@ def cmd_sync(args) -> int:
                           refetch=args.refetch, dry_run=args.dry_run)
         return [report.headline(), *report.lines()]
 
-    return _run_job("sync", job)
+    return _run_job(args, "sync", job)
 
 
 def cmd_activities(args) -> int:
@@ -154,7 +154,21 @@ def cmd_recompute(args) -> int:
             *_stats_lines(conn),
         ]
 
-    return _run_job("recompute", job)
+    return _run_job(args, "recompute", job)
+
+
+def cmd_alerts(args) -> int:
+    """Print the notices the nightly script should send, or record one as sent."""
+    with db.connect() as conn:
+        db.migrate(conn)
+        if args.sent:
+            health.mark_sent(conn, args.sent)
+            return 0
+        with conn.transaction():
+            notices = health.alerts(conn, load_settings(), datetime.now(UTC))
+    # Records end with RECORD_SEP so bodies can span lines.
+    sys.stdout.write("".join(n.record() + health.RECORD_SEP for n in notices))
+    return 0
 
 
 def cmd_stats(args) -> int:
@@ -168,6 +182,8 @@ def main(argv: list[str] | None = None) -> int:
     # httpx logs every request at INFO; a backfill makes hundreds.
     logging.getLogger("httpx").setLevel(logging.WARNING)
     parser = argparse.ArgumentParser(prog="python -m app.cli")
+    parser.add_argument("--trigger", choices=["cli", "schedule"], default="cli",
+                        help="recorded in job_run; the nightly script passes schedule")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("migrate", help="apply pending migrations").set_defaults(func=cmd_migrate)
     p = sub.add_parser("import", help="import city layers, regenerate nodes, apply exclusions")
@@ -194,6 +210,9 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("refresh", help="import city layers the city has changed, with a change report")
     p.add_argument("--force", action="store_true", help="import every layer even if unchanged")
     p.set_defaults(func=cmd_refresh)
+    p = sub.add_parser("alerts", help="print data-health notices for the nightly script to send")
+    p.add_argument("--sent", metavar="KEY", help="record the notice with this key as sent")
+    p.set_defaults(func=cmd_alerts)
     args = parser.parse_args(argv)
     try:
         return args.func(args)

@@ -21,6 +21,7 @@ COVERAGE_SQL = """
 WITH seg AS (
     SELECT s.id, s.layer, s.source_oid, s.source_key, s.name, s.seg_type, s.counted,
            s.uncounted_reason, s.excluded, s.exclusion_reason, s.length_m, s.geom,
+           s.city_change, s.changed_at,
            count(n.id) AS nodes_total, count(n.hit_at) AS nodes_hit
     FROM segment s LEFT JOIN node n ON n.segment_id = s.id
     WHERE s.layer = %(layer)s
@@ -96,7 +97,9 @@ SELECT json_build_object('type', 'FeatureCollection', 'features',
             'nodes_hit', w.nodes_hit,
             'nodes_total', w.nodes_total,
             'uncounted_reason', w.uncounted_reason,
-            'exclusion_reason', w.exclusion_reason)
+            'exclusion_reason', w.exclusion_reason,
+            'city_change', w.city_change,
+            'changed_at', w.changed_at)
     ) ORDER BY w.id, p.state), '[]'::json))::text
 FROM pieces p JOIN whole w ON w.id = p.segment_id
 """

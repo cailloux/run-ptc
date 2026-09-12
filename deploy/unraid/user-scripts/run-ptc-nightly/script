@@ -3,30 +3,37 @@
 #
 # 1. Sync new runs from Intervals.icu.
 # 2. Refresh city data, which imports only if the city has changed a layer.
+# 3. Ask the app for data-health notices and send them.
 #
-# Alerts go through Unraid's notifications (and on to email or whatever
+# Notices go through Unraid's notifications (and on to email or whatever
 # agents you've set up):
-#   - a job fails                    -> alert
-#   - a job is skipped (busy)        -> warning
-#   - the city published new data    -> normal, with the change headline
-# Quiet nights send nothing. Every job's full output lands in this script's
-# log in the User Scripts UI, and in the app's job_run table.
+#   - a data source starts failing, or goes stale  -> alert, once per episode
+#   - it works again after an alert                -> normal ("recovered")
+#   - the city published new data                  -> normal, with the change headline
+#   - the container is down, or a job fails before
+#     the app can record it                        -> alert, every night it happens
+# The app keeps the episodes, so a problem that lasts a week sends one alert,
+# not seven. Quiet nights send nothing. Every job's full output lands in this
+# script's log in the User Scripts UI, and in the app's job_run table.
 #
 # Suggested schedule: custom, "15 3 * * *" (3:15 AM server time).
 
 # ---- settings (each can also be overridden from the environment) ----------
 CONTAINER="${CONTAINER:-run-ptc}"      # the Run PTC app container
 NOTIFY="${NOTIFY:-/usr/local/emhttp/webGui/scripts/notify}"   # Unraid's notify command
+APP_URL="${APP_URL:-}"                 # e.g. http://kirk:8010, for links in notices
 TEST_ALERT="${TEST_ALERT:-0}"          # 1: send one test alert and exit
 ALERT_LINES="${ALERT_LINES:-15}"       # lines of job output included in an alert
 # -----------------------------------------------------------------------------
-
-EXIT_BUSY=75   # the CLI's "another job is running" exit code
 
 notify() {  # severity subject description [message]
   local args=(-e "Run PTC" -i "$1" -s "$2" -d "$3")
   [ -n "${4:-}" ] && args+=(-m "$4")
   "$NOTIFY" "${args[@]}"
+}
+
+link() {  # path -> a line linking to the app, if APP_URL is set
+  [ -n "$APP_URL" ] && printf '\n\n%s' "$APP_URL/$1"
 }
 
 if [ "$TEST_ALERT" = "1" ]; then
@@ -35,15 +42,27 @@ if [ "$TEST_ALERT" = "1" ]; then
   exit 0
 fi
 
+# ---- 0. is the app up? ------------------------------------------------------
+running=$(docker inspect -f '{{.State.Running}}' "$CONTAINER" 2>&1)
+if [ "$running" != "true" ]; then
+  echo "container $CONTAINER isn't running: $running"
+  notify alert "Run PTC: nightly jobs didn't run" \
+    "Container $CONTAINER isn't running or doesn't exist, so nothing ran." \
+    "$(printf '%s\n' \
+      "The nightly script found container $CONTAINER not running on $(date '+%Y-%m-%d at %H:%M')." \
+      "Docker said: $running" "" \
+      "Start it from the Docker tab. The next nightly run catches up on anything missed.")"
+  exit 1
+fi
+
+# ---- 1-2. jobs ----------------------------------------------------------------
 OUTPUT=""
 
-# One line saying why a job failed.
-failure_cause() {  # job
-  local cause
-  # The CLI ends a failed job with "<job> failed (job N): <error>".
-  cause=$(printf '%s\n' "$OUTPUT" | grep -m1 "^$1 failed" || true)
-  if [ -z "$cause" ] && printf '%s\n' "$OUTPUT" | grep -q "Error response from daemon"; then
-    cause="Container $CONTAINER isn't running or doesn't exist, so nothing ran."
+# One line saying why a job failed, from its output.
+failure_cause() {
+  local cause=""
+  if printf '%s\n' "$OUTPUT" | grep -q "Error response from daemon"; then
+    cause="Container $CONTAINER stopped or disappeared during the run."
   fi
   [ -n "$cause" ] || cause=$(printf '%s\n' "$OUTPUT" | grep -v '^[[:space:]]*$' | tail -n 1)
   printf '%s' "${cause:-no output}"
@@ -51,29 +70,30 @@ failure_cause() {  # job
 
 failure_body() {  # job exit-code cause
   printf '%s\n' \
-    "The nightly $1 job failed on $(date '+%Y-%m-%d at %H:%M') (container $CONTAINER, exit code $2)." \
+    "The nightly $1 job failed on $(date '+%Y-%m-%d at %H:%M') (container $CONTAINER, exit code $2)," \
+    "before the app could record it, so this alert repeats each night it happens." \
     "" \
     "Cause: $3" \
     "" \
-    "Full output is in the run-ptc-nightly log in User Scripts; every run is also recorded in the app's job_run table." \
+    "Full output is in the run-ptc-nightly log in User Scripts." \
     "" \
     "Last lines of output:" \
     "$(printf '%s\n' "$OUTPUT" | tail -n "$ALERT_LINES")"
 }
 
 run_job() {  # job -> the job's exit code; its output is left in OUTPUT
-  local job=$1 code cause
+  local job=$1 code cause short
   echo "=== $job ($(date '+%Y-%m-%d %H:%M'))"
-  OUTPUT=$(docker exec "$CONTAINER" python -m app.cli "$job" 2>&1)
+  OUTPUT=$(docker exec "$CONTAINER" python -m app.cli --trigger schedule "$job" 2>&1)
   code=$?
   printf '%s\n' "$OUTPUT"
-  if [ "$code" -eq "$EXIT_BUSY" ]; then
-    notify warning "Run PTC: nightly $job skipped" \
-      "Another job was running; $job will run again tomorrow night."
-  elif [ "$code" -ne 0 ]; then
-    cause=$(failure_cause "$job")
-    # The description is a one-line summary; the body keeps the full cause.
-    local short=$cause
+  # A failure the app recorded ends with "<job> failed (job N): ..."; the
+  # alerts step below reports it. Exit 75 (another job was running) is left
+  # to the staleness check. Anything else failed outside a job: say so now.
+  if [ "$code" -ne 0 ] && [ "$code" -ne 75 ] &&
+     ! printf '%s\n' "$OUTPUT" | grep -q "^$job failed (job "; then
+    cause=$(failure_cause)
+    short=$cause
     [ "${#short}" -gt 160 ] && short="${short:0:157}..."
     notify alert "Run PTC: nightly $job failed" "$short" "$(failure_body "$job" "$code" "$cause")"
   fi
@@ -89,10 +109,31 @@ if run_job refresh; then
   case "$headline" in
     "cart paths: "*)
       notify normal "Run PTC: city data updated" "$headline" \
-        "$(printf '%s\n' "$OUTPUT" | head -n "$ALERT_LINES")" ;;
+        "$(printf '%s\n' "$OUTPUT" | head -n "$ALERT_LINES")$(link '#changes')" ;;
   esac
 else
   status=1
 fi
+
+# ---- 3. data-health notices -----------------------------------------------------
+# The app decides what to send; records end in \x1e, fields split by \x1f.
+# Each notice is marked sent only once notify succeeds, so a failed send
+# comes back tomorrow.
+echo "=== alerts"
+if ! notices=$(docker exec "$CONTAINER" python -m app.cli alerts); then
+  notify alert "Run PTC: health check failed" \
+    "The app's alerts command failed, so data-health notices weren't checked." \
+    "See the run-ptc-nightly log in User Scripts.$(link 'status.html')"
+  exit 1
+fi
+while IFS=$'\x1f' read -r -d $'\x1e' key severity subject description body; do
+  echo "sending: $subject"
+  if notify "$severity" "$subject" "$description" "$body$(link 'status.html')"; then
+    docker exec "$CONTAINER" python -m app.cli alerts --sent "$key" || status=1
+  else
+    echo "notify failed; the app will offer this notice again tomorrow"
+    status=1
+  fi
+done <<< "$notices"
 
 exit "$status"

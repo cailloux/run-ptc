@@ -80,7 +80,7 @@ Store timestamps in UTC. Display them in US Eastern. Dates passed to Intervals a
 - Appdata path: `/mnt/user/appdata/run-ptc/`. The db data is in `pgdata/`, the dev pair (`scripts/kirk-dev.sh`) in `dev/`, and the synced source for tests in `src/`.
 - The dev pair (`run-ptc-dev` at http://192.168.50.2:8011, `run-ptc-dev-db`) is the standing development environment. Keep it running; don't tear it down after a phase. The user switches to the Unraid-managed containers manually.
 - The app applies pending migrations and reapplies exclusions on startup, and marks any `job_run` rows left `running` by a crash as interrupted.
-- Sync, import, refresh, graph, and recompute share one advisory lock (`app/jobs.py`) whether started from the CLI or the map's Sync button, and each run is logged in `job_run`. Run new data jobs through `start_job(...).run(fn)`.
+- Sync, import, refresh, graph, and recompute share one advisory lock (`app/jobs.py`) whether started from the CLI, the nightly script, or a button on the map or status page, and each run is logged in `job_run`. Run new data jobs through `start_job(...).run(fn)`.
 - The app image has a `HEALTHCHECK` using curl against `/health`.
 - CI: GitHub Actions builds the image and pushes it to GHCR. Dependabot covers pip, Docker, and Actions.
 - Authelia and Traefik are not in v1. Don't add them unless asked.
@@ -114,8 +114,11 @@ ssh kirk docker exec run-ptc python -m app.cli graph
 # import any city layer the city has changed since the last import, with a change report
 # (--force imports regardless). Runs nightly from the User Script.
 ssh kirk docker exec run-ptc python -m app.cli refresh
+# data-health notices for the nightly script to send (it marks each one sent
+# with --sent KEY); the status page is /status.html
+ssh kirk docker exec run-ptc python -m app.cli alerts
 ```
 
-Nightly jobs run from the Unraid User Scripts template in `deploy/unraid/user-scripts/run-ptc-nightly`. It acts on CLI exit codes: `1` sends an alert, `75` (another job running) a warning.
+Nightly jobs run from the Unraid User Scripts template in `deploy/unraid/user-scripts/run-ptc-nightly`, passing `--trigger schedule` so `job_run` records them as nightly. The app can't reach Unraid's `notify`, so it decides what to send (`app/health.py`: alert once per failing or stale episode, then a "recovered" notice) and the script sends it. A job that fails before the app records it (exit `1` without a "`<job> failed (job N)`" line) and a stopped container alert straight from the script. The dev pair has no nightly script, so its data shows as stale 36 h after the last manual sync or refresh.
 
 Use `run-ptc-dev` in place of `run-ptc` to target the dev pair.

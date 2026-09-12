@@ -225,6 +225,8 @@ def import_layer(conn: psycopg.Connection, layer: Layer, features: list[dict],
         raise RuntimeError(f"{layer.name}: city returned no features; refusing to import")
 
     with conn.transaction():
+        first_import = not conn.execute(
+            "SELECT EXISTS (SELECT 1 FROM segment WHERE layer = %s)", (layer.name,)).fetchone()[0]
         conn.execute("DROP TABLE IF EXISTS pg_temp.staging")
         conn.execute("""
             CREATE TEMP TABLE staging (
@@ -340,6 +342,16 @@ def import_layer(conn: psycopg.Connection, layer: Layer, features: list[dict],
         added_ids = [r[0] for r in upserted if r[1]]
         report.added_segments = sorted(r[2:] for r in upserted if r[1])
         report.added = len(added_ids)
+        # Marked for the map's "latest city changes" layer. A layer's first
+        # import isn't a change. now() is the transaction's start, so one
+        # import's changes share a timestamp.
+        if not first_import:
+            conn.execute("""
+                UPDATE segment
+                SET city_change = CASE WHEN id = ANY(%(added)s) THEN 'added' ELSE 'changed' END,
+                    changed_at = now()
+                WHERE id = ANY(%(added)s) OR id = ANY(%(changed)s)
+            """, {"added": added_ids, "changed": changed_ids})
 
         regenerate_nodes(conn, added_ids + changed_ids, settings)
         report.exclusion_warnings = excl.apply(conn, exclusions)

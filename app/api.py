@@ -1,15 +1,18 @@
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
+import httpx
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
-from app import db
+from app import db, exclusions, health
 from app.config import intervals_credentials, load_settings
 from app.coverage import coverage_geojson
 from app.graph import main_component
 from app.intervals import IntervalsClient
 from app.jobs import JobBusy, last_runs, start_job
 from app.matching import METERS_PER_MILE, metrics
+from app.refresh import refresh
 from app.routing import GraphMissing, RouteError, leg, snap
 from app.sync import sync, sync_window
 
@@ -50,8 +53,28 @@ def default_intervals_client() -> IntervalsClient:
     return IntervalsClient(athlete_id, api_key)
 
 
+def default_city_client() -> httpx.Client:
+    return httpx.Client(timeout=120)
+
+
+BUSY = "another job is running (sync, import, refresh, or recompute)"
+
+
+def _start_in_background(background: BackgroundTasks, name: str, fn, on_busy=None) -> dict:
+    """Start a job from a button. The job's connection holds the lock until
+    the background task finishes. Poll GET /status (or /sync) for the result."""
+    try:
+        job = start_job(name, "button")
+    except JobBusy:
+        if on_busy:
+            on_busy()
+        raise HTTPException(status_code=409, detail=BUSY)
+    background.add_task(job.run, fn, reraise=False)
+    return {"job_id": job.id}
+
+
 @router.get("/health")
-def health() -> dict:
+def health_check() -> dict:
     with db.connect() as conn:
         conn.execute("SELECT 1")
     return {"status": "ok"}
@@ -192,17 +215,11 @@ def sync_status() -> dict:
 
 @router.post("/sync", status_code=202)
 def start_sync(request: Request, background: BackgroundTasks) -> dict:
-    """Run the default incremental sync in the background. Poll GET /sync for the result."""
+    """Run the default incremental sync in the background."""
     try:
         client = request.app.state.intervals_client_factory()
     except RuntimeError as e:   # credentials not set
         raise HTTPException(status_code=503, detail=str(e))
-    try:
-        job = start_job("sync", "button")
-    except JobBusy:
-        client.close()
-        raise HTTPException(status_code=409,
-                            detail="another job is running (sync, import, or recompute)")
     settings = load_settings()
 
     def run_sync(conn) -> list[str]:
@@ -213,9 +230,124 @@ def start_sync(request: Request, background: BackgroundTasks) -> dict:
             client.close()
         return [report.headline(), *report.lines()]
 
-    # The job's connection holds the lock until the background task finishes.
-    background.add_task(job.run, run_sync, reraise=False)
-    return {"job_id": job.id}
+    return _start_in_background(background, "sync", run_sync, on_busy=client.close)
+
+
+@router.post("/refresh", status_code=202)
+def start_refresh(request: Request, background: BackgroundTasks) -> dict:
+    """Check the city's layers and import any that changed, in the background."""
+    try:
+        excl = exclusions.load()
+    except exclusions.ExclusionError as e:
+        raise HTTPException(status_code=503, detail=f"exclusions.yaml: {e}")
+    settings = load_settings()
+    client = request.app.state.city_client_factory()
+
+    def run_refresh(conn) -> list[str]:
+        try:
+            return refresh(conn, client, settings, excl).lines()
+        finally:
+            client.close()
+
+    return _start_in_background(background, "refresh", run_refresh, on_busy=client.close)
+
+
+@router.get("/changes")
+def changes() -> Response:
+    """Segments from each layer's latest city change (added or changed)."""
+    return _geojson("""
+        SELECT json_build_object('type', 'FeatureCollection', 'features',
+            coalesce(json_agg(json_build_object(
+                'type', 'Feature',
+                'geometry', ST_AsGeoJSON(ST_Transform(s.geom, 4326), 6)::json,
+                'properties', json_build_object(
+                    'layer', s.layer, 'source_oid', s.source_oid, 'name', s.name,
+                    'seg_type', s.seg_type, 'change', s.city_change, 'changed_at', s.changed_at)
+            ) ORDER BY s.layer, s.source_oid), '[]'::json))::text
+        FROM segment s
+        WHERE s.changed_at = (SELECT max(changed_at) FROM segment WHERE layer = s.layer)
+    """, ())
+
+
+JOB_COLS = ("id", "job", "trigger", "status", "started_at", "finished_at", "summary", "error")
+
+
+@router.get("/status")
+def status() -> dict:
+    """Everything the status page and the map's banner show."""
+    settings = load_settings()
+    now = datetime.now(UTC)
+    with db.connect() as conn:
+        sources = {k: h.as_dict() for k, h in health.all_health(conn, settings, now).items()}
+
+        by_status = dict(conn.execute("SELECT status, count(*) FROM activity GROUP BY status").fetchall())
+        sources["sync"]["counts"] = {
+            "city": by_status.get("city", 0), "outside": by_status.get("outside", 0),
+            "no_gps": by_status.get("no_gps", 0),
+            "latest_run": conn.execute(
+                "SELECT max(start_at) FROM activity WHERE status = 'city'").fetchone()[0],
+        }
+
+        layers = {}
+        for (layer, city_count, city_edited, imported_at, stored, counted, counted_m,
+             excluded) in conn.execute("""
+            SELECT l.layer, g.feature_count, g.max_edited_at, g.imported_at,
+                   count(s.id), count(s.id) FILTER (WHERE s.counted AND NOT s.excluded),
+                   coalesce(sum(s.length_m) FILTER (WHERE s.counted AND NOT s.excluded), 0),
+                   count(s.id) FILTER (WHERE s.excluded)
+            FROM (VALUES ('cartpath'), ('road')) l (layer)
+            LEFT JOIN source_signature g ON g.layer = l.layer
+            LEFT JOIN segment s ON s.layer = l.layer
+            GROUP BY 1, 2, 3, 4
+        """):
+            layers[layer] = {
+                "city_features": city_count, "city_last_edited": city_edited,
+                "imported_at": imported_at, "stored": stored, "counted": counted,
+                "counted_mi": round(counted_m / METERS_PER_MILE, 2), "excluded": excluded,
+            }
+        sources["city"]["layers"] = layers
+
+        # The segments /changes shows, and the job that made the latest of
+        # those changes: changed_at is its import's transaction start, so it
+        # falls inside that job's run.
+        change = conn.execute("""
+            WITH latest AS (
+                SELECT s.city_change, s.changed_at FROM segment s
+                WHERE s.changed_at = (SELECT max(changed_at) FROM segment WHERE layer = s.layer)
+            ), at AS (SELECT max(changed_at) AS at FROM latest)
+            SELECT at.at,
+                   (SELECT count(*) FROM latest WHERE city_change = 'added'),
+                   (SELECT count(*) FROM latest WHERE city_change = 'changed'),
+                   j.id, j.job, j.summary
+            FROM at
+            LEFT JOIN LATERAL (
+                SELECT id, job, summary FROM job_run
+                WHERE job IN ('refresh', 'import') AND status = 'ok'
+                  AND started_at <= at.at AND finished_at >= at.at
+                ORDER BY started_at DESC LIMIT 1
+            ) j ON true
+            WHERE at.at IS NOT NULL
+        """).fetchone()
+        sources["city"]["last_change"] = None if change is None else {
+            "changed_at": change[0], "added": change[1], "changed": change[2],
+            "job_id": change[3], "job": change[4], "report": change[5],
+        }
+
+        nightly = health.nightly_last_run(conn)
+        jobs = [dict(zip(JOB_COLS, r)) for r in conn.execute(
+            f"SELECT {', '.join(JOB_COLS)} FROM job_run ORDER BY started_at DESC, id DESC LIMIT 20")]
+        episodes = health.recent_episodes(conn)
+    stale_after = timedelta(hours=settings.stale_after_hours)
+    return {
+        "now": now,
+        "stale_after_hours": settings.stale_after_hours,
+        "sources": sources,
+        "nightly": {"last_run": nightly,
+                    "overdue": nightly is not None and now - nightly > stale_after},
+        "episodes": episodes,
+        "last_alert_sent": max((e["alerted_at"] for e in episodes if e["alerted_at"]), default=None),
+        "jobs": jobs,
+    }
 
 
 @router.get("/stats")

@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app import db, exclusions
-from app.api import default_intervals_client, router
+from app.api import default_city_client, default_intervals_client, router
 from app.config import ROOT
 from app.jobs import mark_interrupted
 
@@ -28,8 +28,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Run PTC", lifespan=lifespan)
-# Tests swap this for a fake so POST /sync never touches the network.
+# Tests swap these for fakes so POST /sync and /refresh never touch the network.
 app.state.intervals_client_factory = default_intervals_client
+app.state.city_client_factory = default_city_client
 app.include_router(router)
 # Mounted last so API routes take precedence.
 app.mount("/", StaticFiles(directory=ROOT / "app" / "static", html=True), name="static")
