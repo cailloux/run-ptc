@@ -62,7 +62,9 @@ node             id, segment_id, part_idx, seq, radius_m, hit_activity_id, hit_a
 activity         id, intervals_id, start_at, sport, name, distance_m, source, status
                  (city | outside | no_gps), track_raw (LineString), geom (MultiLineString),
                  synced_at
-route_edge       id, source, target, cost, reverse_cost, segment_id, geom
+route_edge       id, source, target, cost, reverse_cost, segment_id, part_idx,
+                 part_from, part_to, geom (LineString)
+route_vertex     id, component, geom (Point)
 ```
 
 For cart paths, `source_key` is the `GlobalID`, which is unique and stable across city edits. Roads have no `GlobalID`, so they use `OBJECTID` with the road name stored alongside as a check. `props` keeps every source attribute, so later rules (like radius classes) don't need a re-import.
@@ -133,7 +135,17 @@ Re-import runs monthly or on demand. Segments are compared by `source_key` and g
 
 The graph includes every cart path type, since crossings, entrance stubs, and parking lot segments are real connections even though they don't count toward completion, plus all roads. Edge cost is length, and both directions are allowed on every edge. The `OneWay` field is ignored because you're on foot.
 
-Multipart segments are exploded so each part becomes its own edge. Connections are made only at line endpoints. A cart path endpoint within about 3 m of another endpoint snaps to it. An endpoint that lands mid-road splits the road there. Lines that merely cross are never joined, because tunnels pass under roads and bridges pass over them. Splitting at every crossing would let the router turn from a tunnel onto the road above it. After the graph is built, `pgr_connectedComponents` lists any disconnected islands for review.
+Multipart segments are exploded so each part (1 m or longer) becomes its own edge. Connections are made only at line endpoints:
+
+- **Ends join ends.** Line ends within 3 m of each other (`graph_snap_m`) snap onto one shared junction.
+- **Ends split lines.** An end that lands within 3 m of another line's middle splits that line there, making a T-junction. This applies to cart paths as well as roads: the city rarely breaks a through path at a junction, and 393 cart paths meet another cart path mid-line. Splitting only roads, as first specified, left 68 components and 19.7 mi stranded. As a guard, tunnels and bridges are never split by a road's end.
+- **Crossings never join.** Lines that merely cross stay apart, because tunnels pass under roads and bridges pass over them. Splitting at every crossing would let the router turn from a tunnel onto the road above it.
+
+pgRouting 4.0 has no topology builder that fits these rules. `pgr_separateTouching` failed on this data (16 overlapping road pairs) and can split lines where they only cross. So the T-junction split and the end snapping are our own SQL (`app/graph.py`), while pgRouting assigns junctions (`pgr_extractVertices`) and finds islands (`pgr_connectedComponents`). The build takes under a second and runs after every city import, or on demand with `python -m app.cli graph`.
+
+Each edge also records the stretch of its segment's part that it covers (`part_from`, `part_to`), which maps nodes onto edges. That's what a future "finish these segments for me" planner needs: the graph is a standard pgRouting edges table, so `pgr_dijkstraCostMatrix`, `pgr_TSP`, and `pgr_dijkstraVia` (all installed) can run on it directly.
+
+As of Sept 2026 the graph has 5,078 edges, 4,137 junctions, and 9 components: a main network of 380.9 mi plus 8 islands totaling 1.72 mi, which are shown on the map for review.
 
 ## Route builder
 
@@ -173,7 +185,10 @@ GET  /nodes/{id}                       hit run's date, name, Intervals id
 GET  /activities
 GET  /sync                             latest sync, last success, running?
 POST /sync                             202 started, 409 busy, 503 no credentials
-POST /route/leg   {from, to} -> geometry, length_m
+POST /route/snap  {lat, lon} -> the point on the network
+POST /route/leg   {from, to} -> latlngs, length_m, snapped from/to
+                                 422 too far from the network or unreachable, 503 no graph
+GET  /graph/islands                    edges not connected to the main network
 ```
 
 Retrace, undo, redo, and GPX export run client-side.
