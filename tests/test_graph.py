@@ -16,7 +16,7 @@ def edges(conn):
     """(layer:oid, part_idx, part_from, part_to, length) per edge, in a stable order."""
     return conn.execute("""
         SELECT s.layer || ':' || s.source_oid, e.part_idx, round(e.part_from::numeric, 3)::float8,
-               round(e.part_to::numeric, 3)::float8, round(e.cost::numeric, 1)::float8
+               round(e.part_to::numeric, 3)::float8, round(e.length_m::numeric, 1)::float8
         FROM route_edge e JOIN segment s ON s.id = e.segment_id
         ORDER BY 1, 2, 3
     """).fetchall()

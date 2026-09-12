@@ -14,6 +14,10 @@ import psycopg
 from app.config import Settings
 from app.matching import METERS_PER_MILE
 
+# A road edge is "alongside a path" when this share of it lies within its
+# match radius of a cart path.
+PARALLEL_SHARE = 0.8
+
 
 @dataclass
 class Island:
@@ -28,6 +32,8 @@ class GraphReport:
     vertices: int = 0
     components: int = 0
     main_m: float = 0.0
+    alongside_edges: int = 0
+    alongside_m: float = 0.0
     islands: list[Island] = field(default_factory=list)
 
     def lines(self) -> list[str]:
@@ -36,6 +42,8 @@ class GraphReport:
             f"graph: {self.edges} edges, {self.vertices} junctions, {self.components} components; "
             f"main network {self.main_m / METERS_PER_MILE:.2f} mi, "
             f"{len(self.islands)} islands ({island_m / METERS_PER_MILE:.2f} mi)",
+            f"  {self.alongside_edges} road edges ({self.alongside_m / METERS_PER_MILE:.2f} mi) "
+            f"have a cart path alongside; routing prefers the path",
         ]
         for i in self.islands:
             lines.append(f"  island {i.component}: {i.length_m:.0f} m, {', '.join(i.segments)}")
@@ -132,11 +140,52 @@ def build_graph(conn: psycopg.Connection, settings: Settings) -> GraphReport:
                 JOIN g_piece_end s ON s.id = p.id AND s.which = 's' JOIN center cs ON cs.cluster = s.cluster
                 JOIN g_piece_end e ON e.id = p.id AND e.which = 'e' JOIN center ce ON ce.cluster = e.cluster
             )
-            INSERT INTO route_edge (id, cost, reverse_cost, segment_id, part_idx, part_from, part_to, geom)
-            SELECT id, ST_Length(geom), ST_Length(geom), segment_id, part_idx, part_from, part_to, geom
+            INSERT INTO route_edge (id, length_m, cost, reverse_cost, segment_id, part_idx,
+                                    part_from, part_to, geom)
+            SELECT id, ST_Length(geom), ST_Length(geom), ST_Length(geom), segment_id, part_idx,
+                   part_from, part_to, geom
             FROM snapped
             WHERE NOT (loop AND ST_Length(geom) < %s)
         """, (snap,))
+
+        # Prefer cart paths: a road stretch with a path alongside it, within
+        # the road's own match radius (so running the path still completes
+        # the road), costs more. length_m keeps the true length.
+        conn.execute("""
+            WITH road AS (
+                SELECT e.id, e.geom, e.length_m,
+                       CASE WHEN s.seg_type = ANY(%(wide_classes)s) OR s.name = ANY(%(divided)s)
+                            THEN %(wide_m)s ELSE %(road_m)s END AS radius
+                FROM route_edge e JOIN segment s ON s.id = e.segment_id
+                WHERE s.layer = 'road'
+            ), sample AS (
+                -- Points every 5 m along each road edge. (Measuring the share
+                -- this way, with an indexed EXISTS per point, is ~100x faster
+                -- than share_within() against a collection of nearby paths.)
+                SELECT r.id, r.radius, ST_LineInterpolatePoint(r.geom, i::float8 / k.n) AS pt
+                FROM road r
+                CROSS JOIN LATERAL (SELECT GREATEST(1, CEIL(r.length_m / 5))::int AS n) k
+                CROSS JOIN LATERAL generate_series(0, k.n) i
+            ), alongside AS (
+                SELECT s.id
+                FROM sample s
+                GROUP BY s.id
+                HAVING avg(CASE WHEN EXISTS (
+                    SELECT 1 FROM g_part p
+                    WHERE p.layer = 'cartpath' AND coalesce(p.seg_type, '') NOT IN ('Tunnel', 'Bridge')
+                      AND ST_DWithin(p.geom, s.pt, s.radius)
+                ) THEN 1.0 ELSE 0.0 END) >= %(share)s
+            )
+            UPDATE route_edge e SET cost = e.length_m * %(factor)s, reverse_cost = e.length_m * %(factor)s
+            FROM alongside a WHERE a.id = e.id
+        """, {
+            "wide_classes": list(settings.match_radius_wide_road_classes),
+            "divided": list(settings.divided_roads),
+            "wide_m": settings.match_radius_wide_m,
+            "road_m": settings.match_radius_road_m,
+            "share": PARALLEL_SHARE,
+            "factor": settings.route_parallel_road_factor,
+        })
 
         # 4. Junctions and edge ends, from pgRouting.
         conn.execute("""
@@ -164,12 +213,15 @@ def build_graph(conn: psycopg.Connection, settings: Settings) -> GraphReport:
 
 def graph_report(conn: psycopg.Connection) -> GraphReport:
     report = GraphReport()
-    report.edges, report.vertices, report.components = conn.execute("""
+    (report.edges, report.vertices, report.components,
+     report.alongside_edges, report.alongside_m) = conn.execute("""
         SELECT (SELECT count(*) FROM route_edge), (SELECT count(*) FROM route_vertex),
-               (SELECT count(DISTINCT component) FROM route_vertex)
+               (SELECT count(DISTINCT component) FROM route_vertex),
+               (SELECT count(*) FROM route_edge WHERE cost > length_m),
+               (SELECT coalesce(sum(length_m), 0) FROM route_edge WHERE cost > length_m)
     """).fetchone()
     rows = conn.execute("""
-        SELECT v.component, sum(e.cost) AS length_m,
+        SELECT v.component, sum(e.length_m) AS length_m,
                array_agg(DISTINCT s.layer || ':' || s.source_oid ORDER BY s.layer || ':' || s.source_oid)
         FROM route_edge e JOIN route_vertex v ON v.id = e.source JOIN segment s ON s.id = e.segment_id
         GROUP BY v.component ORDER BY length_m DESC
@@ -183,6 +235,6 @@ def graph_report(conn: psycopg.Connection) -> GraphReport:
 def main_component(conn: psycopg.Connection) -> int | None:
     row = conn.execute("""
         SELECT v.component FROM route_edge e JOIN route_vertex v ON v.id = e.source
-        GROUP BY v.component ORDER BY sum(e.cost) DESC LIMIT 1
+        GROUP BY v.component ORDER BY sum(e.length_m) DESC LIMIT 1
     """).fetchone()
     return row[0] if row else None

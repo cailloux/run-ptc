@@ -86,6 +86,31 @@ def test_leg_never_uses_a_crossing(conn):
     assert_continuous(conn, r, max_gap_m=81)   # the tunnel is one straight 80 m stretch
 
 
+def alongside(conn, path_y, path_type="Path"):
+    """A 200 m road with a cart path at y = path_y, joined by connectors at both ends."""
+    build(conn,
+          cartpaths=[cartpath(1, line((0, path_y), (200, path_y)), type_=path_type),
+                     cartpath(2, line((0, 0), (0, path_y))),
+                     cartpath(3, line((200, 0), (200, path_y)))],
+          roads=[road(1, line((0, 0), (200, 0)))])
+
+
+def test_route_prefers_a_path_alongside_the_road(conn):
+    alongside(conn, 10)
+    r = route(conn, (0, 0), (200, 0))
+    assert r.length_m == pytest.approx(10 + 200 + 10, abs=0.1)   # true length, via the path
+
+
+def test_a_distant_path_does_not_pull_the_route(conn):
+    alongside(conn, 60)
+    assert route(conn, (0, 0), (200, 0)).length_m == pytest.approx(200, abs=0.1)
+
+
+def test_a_tunnel_alongside_does_not_count(conn):
+    alongside(conn, 10, path_type="Tunnel")
+    assert route(conn, (0, 0), (200, 0)).length_m == pytest.approx(200, abs=0.1)
+
+
 def test_click_too_far_from_the_network(conn):
     build(conn, [cartpath(1, line((0, 0), (100, 0)))])
     with pytest.raises(RouteError, match="more than 50 m"):
