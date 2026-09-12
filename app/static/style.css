@@ -23,6 +23,15 @@ body { font: 13px/1.4 system-ui, sans-serif; }
 #sync-status .error { color: #b3261e; }
 #sync-now { flex: none; }
 
+#route { margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #eee; }
+.route-row { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-bottom: 4px; }
+#route-toggle.active { background: #e87ba4; border-color: #b8527a; color: #1a1a19; }
+#route-distance { font-weight: 600; margin-left: 6px; }
+.route-help { color: #77766f; }
+#route-message { color: #52514e; }
+#route-message.error { color: #b3261e; }
+.leaflet-container.routing { cursor: crosshair; }
+
 #legend > div { margin-bottom: 2px; }
 .legend-note { color: #77766f; }
 .swatch { display: inline-block; width: 18px; height: 0; margin: 0 4px 3px 0; vertical-align: middle; }
