@@ -24,7 +24,8 @@ class Layer:
     name: str
     url: str
     oid_field: str
-    # Maps source properties to (source_oid, source_key, name, seg_type, counted).
+    # Maps source properties to
+    # (source_oid, source_key, name, seg_type, counted, uncounted_reason).
     attrs: Callable[[dict, Settings], tuple]
 
 
@@ -41,14 +42,16 @@ def _cartpath_name(value: object) -> str | None:
 def _cartpath_attrs(p: dict, s: Settings) -> tuple:
     name = _cartpath_name(p.get("TunnelName")) or _cartpath_name(p.get("BridgeName"))
     seg_type = _clean(p.get("Type"))
+    counted = seg_type in s.cartpath_counted_types
     return (p["OBJECTID_1"], excl.normalize_global_id(p["GlobalID"]), name, seg_type,
-            seg_type in s.cartpath_counted_types)
+            counted, None if counted else "type")
 
 
 def _road_attrs(p: dict, s: Settings) -> tuple:
     # Roads outside the city stay in the table for routing but never count.
+    counted = _clean(p.get("City")) == s.road_counted_city
     return (p["OBJECTID"], str(p["OBJECTID"]), _clean(p.get("RoadName")), _clean(p.get("CLASS")),
-            _clean(p.get("City")) == s.road_counted_city)
+            counted, None if counted else "outside city")
 
 
 LAYERS = {
@@ -84,10 +87,12 @@ class ImportReport:
     nodes: int = 0
     tiny_parts: list[tuple] = field(default_factory=list)   # (oid, part_idx, length_m)
     nodeless: list[int] = field(default_factory=list)       # counted oids with no nodes
+    second_carriageways: list[int] = field(default_factory=list)   # oids not counted
+    second_carriageway_m: float = 0.0
     exclusion_warnings: list[str] = field(default_factory=list)
 
     def lines(self) -> list[str]:
-        return [
+        lines = [
             f"{self.layer}: {self.raw} raw, {len(self.duplicates)} duplicates dropped, "
             f"{len(self.slivers)} slivers dropped, {len(self.no_geometry)} without geometry",
             f"{self.layer}: {self.stored} stored, {self.counted} counted "
@@ -95,6 +100,10 @@ class ImportReport:
             f"{self.layer}: {self.added} added, {self.changed} changed, {self.removed} removed",
             f"{self.layer}: {self.nodes} nodes, {len(self.tiny_parts)} tiny parts without nodes",
         ]
+        if self.second_carriageways:
+            lines.append(f"{self.layer}: {len(self.second_carriageways)} second-carriageway segments "
+                         f"not counted ({self.second_carriageway_m / METERS_PER_MILE:.2f} mi)")
+        return lines
 
 
 def _edited_at(p: dict) -> datetime | None:
@@ -105,12 +114,77 @@ def _edited_at(p: dict) -> datetime | None:
 def _staging_rows(layer: Layer, features: list[dict], settings: Settings, report: ImportReport):
     for f in features:
         p = f["properties"]
-        oid, key, name, seg_type, counted = layer.attrs(p, settings)
+        oid, key, name, seg_type, counted, reason = layer.attrs(p, settings)
         geom = f.get("geometry")
         if not geom or not geom.get("coordinates"):
             report.no_geometry.append(oid)
             continue
-        yield (oid, key, name, seg_type, counted, _edited_at(p), json.dumps(p), json.dumps(geom))
+        yield (oid, key, name, seg_type, counted, reason, _edited_at(p), json.dumps(p), json.dumps(geom))
+
+
+# Divided roads: a segment is the other carriageway's twin when this share
+# of it lies within TWIN_WITHIN_M of kept same-name segments it doesn't touch.
+TWIN_WITHIN_M = 40
+TWIN_SHARE = 0.8
+
+
+def _mark_second_carriageways(conn: psycopg.Connection, settings: Settings,
+                              report: ImportReport) -> None:
+    """Keep one carriageway of each divided road counted; mark the other in staging.
+
+    Longest chains of touching same-name segments go first, so where the two
+    carriageways are separate chains one whole side is kept. Where they
+    connect, pairing falls back to segment order.
+    """
+    rows = conn.execute("""
+        SELECT source_key, source_oid, name, length_m FROM staging
+        WHERE counted AND name = ANY(%s)
+    """, (list(settings.divided_roads),)).fetchall()
+    if not rows:
+        return
+    touching = conn.execute("""
+        SELECT a.source_key, b.source_key FROM staging a
+        JOIN staging b ON a.name = b.name AND a.source_key < b.source_key AND ST_DWithin(a.geom, b.geom, 1)
+        WHERE a.counted AND b.counted AND a.name = ANY(%(names)s)
+    """, {"names": list(settings.divided_roads)}).fetchall()
+
+    parent = {key: key for key, *_ in rows}
+
+    def root(k: str) -> str:
+        while parent[k] != k:
+            parent[k] = parent[parent[k]]
+            k = parent[k]
+        return k
+
+    for a, b in touching:
+        parent[root(a)] = root(b)
+    chain_m: dict[str, float] = {}
+    for key, _, _, length_m in rows:
+        chain_m[root(key)] = chain_m.get(root(key), 0.0) + length_m
+
+    order = sorted(rows, key=lambda r: (r[2], -chain_m[root(r[0])], root(r[0]), r[1]))
+    kept: dict[str, list[str]] = {}
+    twins = []
+    for key, oid, name, length_m in order:
+        others = kept.setdefault(name, [])
+        share = conn.execute("""
+            SELECT share_within(a.geom, ST_Collect(b.geom), %(within)s)
+            FROM staging a JOIN staging b ON b.source_key = ANY(%(others)s)
+             AND ST_DWithin(a.geom, b.geom, %(within)s) AND ST_Distance(a.geom, b.geom) > 1
+            WHERE a.source_key = %(key)s
+            GROUP BY a.geom
+        """, {"within": TWIN_WITHIN_M, "others": others, "key": key}).fetchone() if others else None
+        if share and share[0] >= TWIN_SHARE:
+            twins.append((key, oid, length_m))
+        else:
+            others.append(key)
+
+    conn.execute("""
+        UPDATE staging SET counted = false, uncounted_reason = 'second carriageway'
+        WHERE source_key = ANY(%s)
+    """, ([k for k, _, _ in twins],))
+    report.second_carriageways = sorted(oid for _, oid, _ in twins)
+    report.second_carriageway_m = sum(m for _, _, m in twins)
 
 
 NODES_SQL = """
@@ -155,6 +229,7 @@ def import_layer(conn: psycopg.Connection, layer: Layer, features: list[dict],
                 name       text,
                 seg_type   text,
                 counted    boolean NOT NULL,
+                uncounted_reason text,
                 edited_at  timestamptz,
                 props      jsonb NOT NULL,
                 geojson    text NOT NULL,
@@ -164,8 +239,8 @@ def import_layer(conn: psycopg.Connection, layer: Layer, features: list[dict],
             ) ON COMMIT DROP
         """)
         with conn.cursor().copy(
-            "COPY staging (source_oid, source_key, name, seg_type, counted, edited_at, props, geojson)"
-            " FROM STDIN"
+            "COPY staging (source_oid, source_key, name, seg_type, counted, uncounted_reason,"
+            " edited_at, props, geojson) FROM STDIN"
         ) as copy:
             for row in _staging_rows(layer, features, settings, report):
                 copy.write_row(row)
@@ -216,6 +291,10 @@ def import_layer(conn: psycopg.Connection, layer: Layer, features: list[dict],
             )
         conn.execute("DELETE FROM staging WHERE source_key = ANY(%s)", ([d[1] for d in dups],))
 
+        if layer.name == "road":
+            conn.execute("CREATE INDEX ON staging USING gist (geom)")
+            _mark_second_carriageways(conn, settings, report)
+
         changed_ids = [r[0] for r in conn.execute("""
             SELECT s.id FROM segment s
             JOIN staging t ON t.source_key = s.source_key
@@ -232,15 +311,16 @@ def import_layer(conn: psycopg.Connection, layer: Layer, features: list[dict],
 
         upserted = conn.execute("""
             INSERT INTO segment (layer, source_key, source_oid, name, seg_type, counted,
-                                 length_m, source_edited_at, geom_hash, props, geom)
+                                 uncounted_reason, length_m, source_edited_at, geom_hash, props, geom)
             SELECT %s, source_key, source_oid, name, seg_type, counted,
-                   length_m, edited_at, geom_hash, props, geom
+                   uncounted_reason, length_m, edited_at, geom_hash, props, geom
             FROM staging
             ON CONFLICT (layer, source_key) DO UPDATE SET
                 source_oid = EXCLUDED.source_oid,
                 name = EXCLUDED.name,
                 seg_type = EXCLUDED.seg_type,
                 counted = EXCLUDED.counted,
+                uncounted_reason = EXCLUDED.uncounted_reason,
                 length_m = EXCLUDED.length_m,
                 source_edited_at = EXCLUDED.source_edited_at,
                 geom_hash = EXCLUDED.geom_hash,

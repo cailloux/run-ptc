@@ -45,7 +45,9 @@ def assign_radii(conn: psycopg.Connection, settings: Settings, *,
         SET radius_m = CASE
             WHEN s.layer = 'cartpath' AND n.seq IN (0, e.last_seq) THEN %(cartpath_end_m)s
             WHEN s.layer = 'cartpath' THEN %(cartpath_m)s
-            WHEN s.seg_type = ANY(%(wide_classes)s) THEN %(wide_m)s
+            -- A divided road counts one carriageway; the wide radius lets
+            -- running the far side's sidewalk still hit it.
+            WHEN s.seg_type = ANY(%(wide_classes)s) OR s.name = ANY(%(divided)s) THEN %(wide_m)s
             ELSE %(road_m)s
         END
         FROM segment s, part_end e
@@ -55,6 +57,7 @@ def assign_radii(conn: psycopg.Connection, settings: Settings, *,
           AND (NOT %(missing_only)s OR n.radius_m IS NULL)
     """, {
         "wide_classes": list(settings.match_radius_wide_road_classes),
+        "divided": list(settings.divided_roads),
         "cartpath_m": settings.match_radius_cartpath_m,
         "cartpath_end_m": settings.match_radius_cartpath_end_m,
         "road_m": settings.match_radius_road_m,

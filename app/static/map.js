@@ -65,9 +65,15 @@ function segmentPopup(f) {
   ];
   if (p.nodes_total) rows.push(['Nodes hit', `${p.nodes_hit} of ${p.nodes_total}`]);
   if (p.state === 'excluded') rows.push(['Excluded', p.exclusion_reason]);
-  const head = p.state === 'uncounted' || p.state === 'excluded' || p.state === 'complete'
+  else if (p.uncounted_reason && p.uncounted_reason !== 'second carriageway') {
+    rows.push(['Not counted', p.uncounted_reason]);
+  }
+  let head = p.state === 'uncounted' || p.state === 'excluded' || p.state === 'complete'
     ? STATE_LABEL[p.state]
     : `${STATE_LABEL[p.state]} (this piece, ${p.length_m} m)`;
+  if (p.uncounted_reason === 'second carriageway') {
+    head = 'Second carriageway: shows the other side\'s coverage';
+  }
   return `<b>${escapeHtml(head)}</b><br>`
     + rows.map(([k, v]) => `<b>${k}</b> ${escapeHtml(String(v))}`).join('<br>');
 }
