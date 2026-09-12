@@ -30,6 +30,7 @@ class Settings:
     route_snap_max_m: float
     divided_roads: tuple[str, ...]
     route_parallel_road_factor: float
+    stale_after_hours: float
 
 
 def load_settings(path: Path = CONFIG_DIR / "settings.yaml") -> Settings:
