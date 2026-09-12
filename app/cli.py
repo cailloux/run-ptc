@@ -9,14 +9,19 @@ from datetime import date
 import httpx
 
 from app import db, exclusions
-from app.arcgis import fetch_features
+from app.arcgis import fetch_features, layer_signature
 from app.config import intervals_credentials, load_settings
 from app.graph import build_graph
 from app.importer import LAYERS, METERS_PER_MILE, import_layer
 from app.intervals import IntervalsClient
 from app.jobs import JobBusy, JobFn, start_job
 from app.matching import metrics, near_miss_lines, near_misses, recompute
+from app.refresh import refresh, store_signature
 from app.sync import EASTERN, sync, sync_window
+
+
+# Exit codes the nightly User Script acts on: 1 alerts, EXIT_BUSY warns.
+EXIT_BUSY = 75   # EX_TEMPFAIL: another job holds the lock; try again later
 
 
 def _run_job(job: str, fn: JobFn) -> int:
@@ -26,9 +31,9 @@ def _run_job(job: str, fn: JobFn) -> int:
     try:
         lines = start_job(job, "cli").run(fn)
     except JobBusy:
-        print("another job is running (sync, import, or recompute); try again when it finishes",
+        print("another job is running (sync, import, refresh, or recompute); try again when it finishes",
               file=sys.stderr)
-        return 1
+        return EXIT_BUSY
     print("\n".join(lines))
     return 0
 
@@ -48,15 +53,33 @@ def cmd_import(args) -> int:
 
     def job(conn) -> list[str]:
         lines = []
+        signatures = {}
         with httpx.Client(timeout=120) as client:
             for name in names:
                 layer = LAYERS[name]
+                # Taken before the download, so an edit in between is caught
+                # by the next refresh rather than missed.
+                signatures[name] = layer_signature(client, layer.url, layer.oid_field)
                 features = fetch_features(client, layer.url, layer.oid_field)
                 lines += import_layer(conn, layer, features, settings, excl).lines()
         # City data changed, so the routing graph is rebuilt from it.
-        return lines + build_graph(conn, settings).lines()
+        lines += build_graph(conn, settings).lines()
+        for name, sig in signatures.items():
+            store_signature(conn, name, sig)
+        return lines
 
     return _run_job("import", job)
+
+
+def cmd_refresh(args) -> int:
+    settings = load_settings()
+    excl = exclusions.load()
+
+    def job(conn) -> list[str]:
+        with httpx.Client(timeout=120) as client:
+            return refresh(conn, client, settings, excl, force=args.force).lines()
+
+    return _run_job("refresh", job)
 
 
 def cmd_graph(args) -> int:
@@ -160,6 +183,9 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("stats", help="completion metrics and near misses").set_defaults(func=cmd_stats)
     sub.add_parser("graph", help="rebuild the routing graph and list its islands").set_defaults(
         func=cmd_graph)
+    p = sub.add_parser("refresh", help="import city layers the city has changed, with a change report")
+    p.add_argument("--force", action="store_true", help="import every layer even if unchanged")
+    p.set_defaults(func=cmd_refresh)
     args = parser.parse_args(argv)
     try:
         return args.func(args)

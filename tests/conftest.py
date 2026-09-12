@@ -23,5 +23,5 @@ def conn(db_url):
         # 4 s). On real data JIT makes no measurable difference either way.
         c.execute("SET jit = off")
         c.execute("TRUNCATE segment, node, source_duplicate, activity, activity_piece, job_run,"
-                  " route_edge, route_vertex RESTART IDENTITY CASCADE")
+                  " route_edge, route_vertex, source_signature RESTART IDENTITY CASCADE")
         yield c
