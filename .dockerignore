@@ -6,4 +6,5 @@
 .pytest_cache
 docs
 deploy
+!deploy/unraid/user-scripts
 scripts

@@ -1,0 +1,1 @@
+Run PTC nightly: sync runs from Intervals.icu, then refresh city data if the city changed it. Alerts through Unraid notifications.
