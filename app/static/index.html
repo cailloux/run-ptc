@@ -11,8 +11,9 @@
 </head>
 <body>
   <div id="map"></div>
+  <div id="banner" hidden></div>
   <div id="panel">
-    <h1>Run PTC</h1>
+    <h1>Run PTC <a id="status-link" href="status.html">Status</a></h1>
     <div id="completion">Loading…</div>
     <div id="sync">
       <div id="sync-status"></div>
@@ -65,11 +66,16 @@
         <span class="dot hit"></span>Hit node
         <span class="legend-note">(nodes show from zoom 15)</span>
       </div>
+      <div>
+        <span class="swatch changed"></span>Latest city change
+        <span class="legend-note">(when turned on)</span>
+      </div>
     </div>
   </div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"
           integrity="sha512-puJW3E/qXDqYp9IfhAI54BJEaWIfloJ7JWs7OeD5i6ruC9JZL1gERT1wjtwXFlh7CjE7ZJ+/vcRZRkIYIb6p4g=="
           crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="common.js"></script>
   <script src="map.js"></script>
   <script src="route.js"></script>
 </body>

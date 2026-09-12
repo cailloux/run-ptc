@@ -22,7 +22,7 @@ body { font: 13px/1.4 system-ui, sans-serif; }
 
 #sync { display: flex; gap: 8px; align-items: flex-start; justify-content: space-between;
         margin-bottom: 8px; padding: 6px 0; border-top: 1px solid #eee; border-bottom: 1px solid #eee; }
-#sync-status { color: #52514e; }
+#sync-status { color: #52514e; overflow-wrap: anywhere; }
 #sync-status .error { color: #b3261e; }
 #sync-now { flex: none; }
 
@@ -56,3 +56,48 @@ body { font: 13px/1.4 system-ui, sans-serif; }
 .dot.missed { width: 8px; height: 8px; background: #fff; border: 1.5px solid #3a3936; }
 .dot.missed-road { width: 7px; height: 7px; background: #ffd84d; border: 1.5px solid #3a3936; margin-left: 8px; }
 .dot.hit { width: 5px; height: 5px; background: #333; }
+.swatch.changed { border-top: 8px solid #e8c547; }
+
+#panel h1 { display: flex; justify-content: space-between; align-items: baseline; }
+#status-link { font-size: 12px; font-weight: normal; }
+
+/* Freshness banner: amber when stale, red when failing, each with an icon. */
+#banner {
+  position: absolute; top: 10px; left: 50px; right: 350px; z-index: 1000; max-width: 640px;
+  padding: 6px 10px; border-radius: 6px; box-shadow: 0 1px 5px rgba(0, 0, 0, 0.35);
+}
+#banner[hidden] { display: none; }
+#banner.stale { background: #fff4d6; border: 1px solid #c98a00; color: #4d3800; }
+#banner.failing { background: #fde7e5; border: 1px solid #b3261e; color: #6b150f; }
+#banner .icon { display: inline-block; width: 1.2em; font-weight: 700; }
+#banner a { color: inherit; font-weight: 600; }
+
+/* ---- status page ---------------------------------------------------------- */
+.status-page { background: #f6f6f4; color: #1a1a19; }
+.status-page header { display: flex; align-items: baseline; gap: 16px; padding: 12px 20px;
+                      background: #fff; border-bottom: 1px solid #e2e1dc; }
+.status-page header h1 { font-size: 17px; margin: 0; }
+.status-page main { max-width: 900px; padding: 16px 20px; }
+.card { background: #fff; border: 1px solid #e2e1dc; border-radius: 6px; padding: 12px 14px; margin-bottom: 14px; }
+.card h2 { font-size: 15px; margin: 0 0 8px; display: flex; align-items: center; gap: 10px; }
+.card h2 button { margin-left: auto; font-weight: normal; }
+.card dl { display: grid; grid-template-columns: max-content 1fr; gap: 3px 14px; margin: 0 0 8px; }
+.card dt { color: #52514e; }
+.card dd { margin: 0; }
+.card table { border-collapse: collapse; width: 100%; }
+.card th, .card td { text-align: left; padding: 3px 10px 3px 0; border-bottom: 1px solid #efeee9; vertical-align: top; }
+.card th { color: #52514e; font-weight: 600; }
+.card td.num, .card th.num { text-align: right; }
+#jobs td, #episodes td { white-space: nowrap; }
+#jobs td:last-child, #episodes td.wrap, .card dd { white-space: normal; overflow-wrap: anywhere; }
+#jobs summary { cursor: pointer; }
+.card pre { white-space: pre-wrap; font-size: 12px; background: #f6f6f4; padding: 8px; margin: 6px 0 0; }
+.card .note { color: #77766f; }
+.card .error { color: #b3261e; }
+.card .message { margin-top: 6px; }
+
+.badge { font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 10px; border: 1px solid; }
+.badge.ok { background: #e3f4ec; color: #0d5c40; border-color: #199e70; }
+.badge.stale { background: #fff4d6; color: #4d3800; border-color: #c98a00; }
+.badge.failing { background: #fde7e5; color: #6b150f; border-color: #b3261e; }
+.badge.running { background: #e6eef8; color: #123e73; border-color: #1c5cab; }
