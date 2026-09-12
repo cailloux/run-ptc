@@ -26,6 +26,8 @@ class Settings:
     match_radius_road_m: float
     match_radius_wide_m: float
     match_radius_wide_road_classes: tuple[str, ...]
+    graph_snap_m: float
+    route_snap_max_m: float
 
 
 def load_settings(path: Path = CONFIG_DIR / "settings.yaml") -> Settings:

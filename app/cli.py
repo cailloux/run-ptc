@@ -11,6 +11,7 @@ import httpx
 from app import db, exclusions
 from app.arcgis import fetch_features
 from app.config import intervals_credentials, load_settings
+from app.graph import build_graph
 from app.importer import LAYERS, METERS_PER_MILE, import_layer
 from app.intervals import IntervalsClient
 from app.jobs import JobBusy, JobFn, start_job
@@ -52,9 +53,15 @@ def cmd_import(args) -> int:
                 layer = LAYERS[name]
                 features = fetch_features(client, layer.url, layer.oid_field)
                 lines += import_layer(conn, layer, features, settings, excl).lines()
-        return lines
+        # City data changed, so the routing graph is rebuilt from it.
+        return lines + build_graph(conn, settings).lines()
 
     return _run_job("import", job)
+
+
+def cmd_graph(args) -> int:
+    settings = load_settings()
+    return _run_job("graph", lambda conn: build_graph(conn, settings).lines())
 
 
 def cmd_exclusions(args) -> int:
@@ -151,6 +158,8 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("recompute", help="clear all hits and replay every stored run").set_defaults(
         func=cmd_recompute)
     sub.add_parser("stats", help="completion metrics and near misses").set_defaults(func=cmd_stats)
+    sub.add_parser("graph", help="rebuild the routing graph and list its islands").set_defaults(
+        func=cmd_graph)
     args = parser.parse_args(argv)
     try:
         return args.func(args)
