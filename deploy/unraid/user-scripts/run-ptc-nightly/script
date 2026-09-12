@@ -1,0 +1,72 @@
+#!/bin/bash
+# Run PTC nightly jobs, for the Unraid User Scripts plugin.
+#
+# 1. Sync new runs from Intervals.icu.
+# 2. Refresh city data, which imports only if the city has changed a layer.
+#
+# Alerts go through Unraid's notifications (and on to email or whatever
+# agents you've set up):
+#   - a job fails                    -> alert
+#   - a job is skipped (busy)        -> warning
+#   - the city published new data    -> normal, with the change headline
+# Quiet nights send nothing. Every job's full output lands in this script's
+# log in the User Scripts UI, and in the app's job_run table.
+#
+# Suggested schedule: custom, "15 3 * * *" (3:15 AM server time).
+
+# ---- settings (each can also be overridden from the environment) ----------
+CONTAINER="${CONTAINER:-run-ptc}"      # the Run PTC app container
+NOTIFY="${NOTIFY:-/usr/local/emhttp/webGui/scripts/notify}"   # Unraid's notify command
+TEST_ALERT="${TEST_ALERT:-0}"          # 1: send one test alert and exit
+ALERT_LINES="${ALERT_LINES:-30}"       # lines of job output included in an alert
+# -----------------------------------------------------------------------------
+
+EXIT_BUSY=75   # the CLI's "another job is running" exit code
+
+notify() {  # severity subject description [message]
+  local args=(-e "Run PTC" -i "$1" -s "$2" -d "$3")
+  [ -n "${4:-}" ] && args+=(-m "$4")
+  "$NOTIFY" "${args[@]}"
+}
+
+if [ "$TEST_ALERT" = "1" ]; then
+  notify alert "Run PTC: test alert" "Nightly job alerts will arrive like this."
+  echo "sent a test alert"
+  exit 0
+fi
+
+OUTPUT=""
+run_job() {  # job -> the job's exit code; its output is left in OUTPUT
+  local job=$1 code
+  echo "=== $job ($(date '+%Y-%m-%d %H:%M'))"
+  OUTPUT=$(docker exec "$CONTAINER" python -m app.cli "$job" 2>&1)
+  code=$?
+  printf '%s\n' "$OUTPUT"
+  if [ "$code" -eq "$EXIT_BUSY" ]; then
+    notify warning "Run PTC: nightly $job skipped" \
+      "Another job was running; $job will run again tomorrow night."
+  elif [ "$code" -ne 0 ]; then
+    local first
+    first=$(printf '%s\n' "$OUTPUT" | grep -m1 -iE 'error|exception|failed|refusing' || true)
+    notify alert "Run PTC: nightly $job failed" "${first:-exit code $code}" \
+      "$(printf '%s\n' "$OUTPUT" | tail -n "$ALERT_LINES")"
+  fi
+  return "$code"
+}
+
+status=0
+run_job sync || status=1
+
+if run_job refresh; then
+  # The report's first line says whether anything changed.
+  headline=$(printf '%s\n' "$OUTPUT" | grep -m1 -E '^(city data unchanged|cart paths: )' || true)
+  case "$headline" in
+    "cart paths: "*)
+      notify normal "Run PTC: city data updated" "$headline" \
+        "$(printf '%s\n' "$OUTPUT" | head -n "$ALERT_LINES")" ;;
+  esac
+else
+  status=1
+fi
+
+exit "$status"

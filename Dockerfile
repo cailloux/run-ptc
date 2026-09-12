@@ -28,6 +28,8 @@ USER root
 COPY requirements-dev.txt .
 RUN pip install --no-cache-dir -r requirements-dev.txt
 COPY tests tests
+# The nightly User Script template is tested against fake docker/notify.
+COPY deploy/unraid/user-scripts deploy/unraid/user-scripts
 USER app
 CMD ["pytest", "-q", "-p", "no:cacheprovider", "tests"]
 
