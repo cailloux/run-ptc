@@ -15,7 +15,7 @@ from app import exclusions as excl
 from app.arcgis import LayerSignature, fetch_features, layer_signature
 from app.config import Settings
 from app.graph import GraphReport, build_graph, graph_report
-from app.importer import LAYERS, METERS_PER_MILE, ImportReport, import_layer
+from app.importer import LAYERS, METERS_PER_MILE, ImportReport, Layer, import_layer
 from app.matching import metrics
 
 LAYER_LABEL = {"cartpath": "cart paths", "road": "roads"}
@@ -135,6 +135,18 @@ class RefreshReport:
         return lines
 
 
+def download(client: httpx.Client, layer: Layer, sig: LayerSignature, fetch=fetch_features) -> list[dict]:
+    """Fetch a layer, refusing a download that doesn't match the signature's
+    count. A page lost to a server glitch would otherwise delete real segments
+    (and their hits). A city edit between the two requests also fails it; the
+    next run retries."""
+    features = fetch(client, layer.url, layer.oid_field)
+    if len(features) != sig.feature_count:
+        raise RuntimeError(f"{layer.name}: downloaded {len(features)} features but the city reports "
+                           f"{sig.feature_count}; refusing a partial import")
+    return features
+
+
 def refresh(conn: psycopg.Connection, client: httpx.Client, settings: Settings,
             exclusions: excl.Exclusions, *, force: bool = False,
             signature=layer_signature, fetch=fetch_features) -> RefreshReport:
@@ -150,7 +162,7 @@ def refresh(conn: psycopg.Connection, client: httpx.Client, settings: Settings,
     report.before = snapshot(conn)
     for name in changed:
         layer = LAYERS[name]
-        features = fetch(client, layer.url, layer.oid_field)
+        features = download(client, layer, report.signatures[name], fetch)
         report.imports[name] = import_layer(conn, layer, features, settings, exclusions)
     report.graph = build_graph(conn, settings)
     report.after = snapshot(conn)
