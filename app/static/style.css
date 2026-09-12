@@ -1,4 +1,7 @@
 html, body, #map { height: 100%; margin: 0; }
+/* OSM tiles in grayscale: land comes out near #efefef, the background the
+   coverage palette was validated against. */
+.basemap { filter: grayscale(1); }
 body { font: 13px/1.4 system-ui, sans-serif; }
 
 #panel {

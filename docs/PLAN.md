@@ -170,7 +170,7 @@ The route is a start point plus an ordered list of legs, and each leg holds its 
 
 ## Map UI
 
-The map stays on Leaflet, since the viewer already validated it with this data. Its canvas renderer handles the node and segment counts involved. Layers:
+The map stays on Leaflet, since the viewer already validated it with this data. Its canvas renderer handles the node and segment counts involved. The basemap is OpenStreetMap's standard tiles, used within the OSMF tile policy (visible attribution, normal Referer, no bulk or prefetching) and rendered in grayscale so OSM's orange roads and green parks don't compete with the coverage colors. They also render to zoom 19, where the earlier Esri basemap stopped at 16. Layers:
 
 - Cart path coverage in three states: complete segments; run intervals on segments that aren't complete yet; intervals not run. Road coverage in two: run and not run. An interval is run when both of its end nodes are hit, and consecutive intervals with the same state are drawn as one line, never across parts.
 - Missed nodes as dots (cart paths on by default, roads off; shown from zoom 15)
