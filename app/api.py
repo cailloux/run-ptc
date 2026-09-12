@@ -60,8 +60,9 @@ def health() -> dict:
 @router.get("/network")
 def network(layer: LayerName) -> Response:
     """Segments with coverage state per run of node intervals (see app/coverage.py)."""
+    spacing_m = load_settings().node_spacing_m
     with db.connect() as conn:
-        body = coverage_geojson(conn, layer)
+        body = coverage_geojson(conn, layer, spacing_m)
     return Response(body, media_type="application/geo+json")
 
 
@@ -157,7 +158,7 @@ def graph_islands() -> Response:
         main = main_component(conn)
         body = conn.execute("""
             WITH island AS (
-                SELECT v.component, sum(e.cost) AS length_m
+                SELECT v.component, sum(e.length_m) AS length_m
                 FROM route_edge e JOIN route_vertex v ON v.id = e.source
                 WHERE v.component IS DISTINCT FROM %(main)s
                 GROUP BY v.component
