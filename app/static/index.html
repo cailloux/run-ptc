@@ -18,6 +18,23 @@
       <div id="sync-status"></div>
       <button id="sync-now" disabled>Sync now</button>
     </div>
+    <div id="route">
+      <div class="route-row">
+        <button id="route-toggle">Plan a route</button>
+        <span id="route-distance"></span>
+      </div>
+      <div id="route-tools" hidden>
+        <div class="route-row">
+          <button id="route-undo" title="Undo (Ctrl/Cmd+Z)">Undo</button>
+          <button id="route-redo" title="Redo (Ctrl/Cmd+Shift+Z)">Redo</button>
+          <button id="route-retrace">Retrace to start</button>
+          <button id="route-clear">Clear</button>
+          <button id="route-export">Export GPX</button>
+        </div>
+        <div class="route-help">Click to add a leg. Shift-click the route to retrace back to that point.</div>
+      </div>
+      <div id="route-message"></div>
+    </div>
     <table id="stats"></table>
     <form id="find">
       <input id="find-oid" type="number" placeholder="Cart path OBJECTID_1">
@@ -54,5 +71,6 @@
           integrity="sha512-puJW3E/qXDqYp9IfhAI54BJEaWIfloJ7JWs7OeD5i6ruC9JZL1gERT1wjtwXFlh7CjE7ZJ+/vcRZRkIYIb6p4g=="
           crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="map.js"></script>
+  <script src="route.js"></script>
 </body>
 </html>

@@ -10,6 +10,22 @@ const METERS_PER_MILE = 1609.344;
 const NODE_MIN_ZOOM = 15;
 const SYNC_POLL_MS = 3000;
 
+// Set by route.js while the route builder is using map clicks.
+let routeMode = false;
+
+// Popups open on click, except in route mode: Leaflet's own popups stop the
+// click from reaching the map, which would swallow route clicks on any line.
+function clickPopup(layer, content) {
+  layer.on('click', (e) => {
+    if (routeMode) return;
+    L.DomEvent.stop(e);
+    const popup = L.popup().setLatLng(e.latlng).setContent('Loading…').openOn(map);
+    Promise.resolve(content())
+      .then((html) => popup.setContent(html))
+      .catch((err) => popup.setContent(escapeHtml(err.message)));
+  });
+}
+
 // Coverage colors, validated with the dataviz palette checker against the
 // gray basemap: the three cart path hues are colorblind-safe as a set. Not
 // run is the heavy line on both layers, since that's where the focus goes.
@@ -91,7 +107,7 @@ function makeNetwork(layer) {
   return L.geoJSON(null, {
     style: coverageStyle(layer),
     onEachFeature: (f, l) => {
-      l.bindPopup(() => segmentPopup(f));
+      clickPopup(l, () => segmentPopup(f));
       if (layer !== 'cartpath') return;
       const oid = f.properties.source_oid;
       if (!cartpathPieces.has(oid)) cartpathPieces.set(oid, []);
@@ -132,12 +148,7 @@ async function nodePopup(id) {
 function nodeLayer(urls, missedStyle = 'missed') {
   const inner = L.geoJSON(null, {
     pointToLayer: (f, latlng) => L.circleMarker(latlng, NODE_STYLE[f.properties.hit ? 'hit' : missedStyle]),
-    onEachFeature: (f, l) => {
-      l.bindPopup('Loading…');
-      l.on('popupopen', (e) => nodePopup(f.properties.id)
-        .then((html) => e.popup.setContent(html))
-        .catch((err) => e.popup.setContent(escapeHtml(err.message))));
-    },
+    onEachFeature: (f, l) => clickPopup(l, () => nodePopup(f.properties.id)),
   });
   const wrapper = L.layerGroup();
   let loaded = false;
@@ -191,7 +202,27 @@ function trackPopup(f) {
 // Run tracks are off by default and fetched the first time they're shown.
 const tracks = L.geoJSON(null, {
   style: { color: '#e6550d', weight: 2, opacity: 0.5 },
-  onEachFeature: (f, l) => l.bindPopup(() => trackPopup(f)),
+  onEachFeature: (f, l) => clickPopup(l, () => trackPopup(f)),
+});
+
+// ---- graph islands ------------------------------------------------------
+
+// Parts of the routing graph not connected to the main network: routes
+// can't reach them. Off by default, for review.
+const islands = L.geoJSON(null, {
+  style: { color: '#111', weight: 5, dashArray: '2 6', opacity: 0.9 },
+  onEachFeature: (f, l) => clickPopup(l, () => {
+    const p = f.properties;
+    return `<b>Island</b> (${p.island_length_m} m in all)<br>`
+      + `${escapeHtml(p.layer)} ${p.source_oid} · ${escapeHtml(p.seg_type ?? '')}`
+      + (p.name ? `<br>${escapeHtml(p.name)}` : '');
+  }),
+});
+let islandsRequested = false;
+islands.on('add', () => {
+  if (islandsRequested) return;
+  islandsRequested = true;
+  getJson('graph/islands').then((fc) => islands.addData(fc)).catch((err) => alert(err.message));
 });
 let tracksRequested = false;
 
@@ -300,7 +331,7 @@ function findCartpath(oid) {
   if (!pieces) return alert('No cart path with that OBJECTID_1');
   const bounds = L.featureGroup(pieces).getBounds();
   map.fitBounds(bounds, { maxZoom: 19, padding: [40, 40] });
-  pieces[0].openPopup(bounds.getCenter());
+  L.popup().setLatLng(bounds.getCenter()).setContent(segmentPopup(pieces[0].feature)).openOn(map);
 }
 
 document.getElementById('find').addEventListener('submit', (e) => {
@@ -325,6 +356,7 @@ document.getElementById('find').addEventListener('submit', (e) => {
   nodeLayers['Missed cart path nodes'].wrapper.addTo(map);
   nodeLayers['Missed road nodes'].wrapper.addTo(map);
   overlays['Run tracks'] = tracks;
+  overlays['Graph islands'] = islands;
   L.control.layers(null, overlays, { collapsed: false, position: 'bottomright' }).addTo(map);
 
   const s = await getJson('sync');
