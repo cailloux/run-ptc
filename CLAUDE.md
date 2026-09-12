@@ -69,6 +69,7 @@ Store timestamps in UTC. Display them in US Eastern. Dates passed to Intervals a
 
 - Stage files explicitly with `git add <file>`. Never `git add .` or `git add -A`.
 - Use one branch per phase and open a PR when the phase passes its check.
+- `main` requires linear history (a repo ruleset), so PRs merge with **Rebase and merge**, never a merge commit.
 - Keep commits small, with messages that say what changed and why.
 
 ## Deployment
@@ -107,6 +108,8 @@ ssh kirk docker exec run-ptc python -m app.cli activities --status outside
 ssh kirk docker exec run-ptc python -m app.cli recompute
 # completion metrics and missed nodes by distance to the nearest run (read-only)
 ssh kirk docker exec run-ptc python -m app.cli stats
+# rebuild the routing graph and list its islands (import also rebuilds it)
+ssh kirk docker exec run-ptc python -m app.cli graph
 ```
 
 Use `run-ptc-dev` in place of `run-ptc` to target the dev pair.
