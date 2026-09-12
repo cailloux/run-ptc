@@ -30,6 +30,7 @@ Single-user planning tool for running every cart path and road in Peachtree City
 - GIST-index every geometry column.
 - Both layers contain MultiLineString features (141 counted cart paths, 23 roads), and the parts are often separated by real gaps. Store one segment per source feature as MultiLineString, but never let nodes, coverage intervals, or routing edges span parts. Work per part (`node.part_idx`).
 - Compute every length from geometry. Never read the city's length attributes (`LengthMile`, `LENGTH`, `Length`, `Shape.STLength()`).
+- Don't measure "how much of a line is near something" with `ST_Length(ST_Intersection(line, ST_Buffer(...)))`. The pgrouting image ships GEOS 3.9.0, which returns EMPTY for that intersection when the line is exactly horizontal or vertical. Sample points and use `ST_DWithin` (the `share_within()` SQL function, or an indexed `EXISTS` per sample for large sets).
 - Import clean-up (duplicates, slivers under 1 m, roads outside the city) is described in `docs/PLAN.md` under "Clean-up on import."
 
 ## External services
