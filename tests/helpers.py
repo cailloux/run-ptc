@@ -24,6 +24,8 @@ SETTINGS = Settings(
     match_radius_road_m=20,
     match_radius_wide_m=30,
     match_radius_wide_road_classes=("Arterial",),
+    graph_snap_m=3,
+    route_snap_max_m=50,
 )
 
 

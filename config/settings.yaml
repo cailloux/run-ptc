@@ -43,3 +43,10 @@ match_radius_cartpath_end_m: 10
 match_radius_road_m: 20
 match_radius_wide_m: 30
 match_radius_wide_road_classes: [Arterial]
+
+# Routing graph: line ends within this distance join, and an end this close
+# to another line's middle splits that line into a T-junction.
+graph_snap_m: 3
+
+# Route builder: a click farther than this from any path or road is refused.
+route_snap_max_m: 50
