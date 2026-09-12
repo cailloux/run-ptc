@@ -57,14 +57,46 @@ def test_new_city_data_sends_a_normal_notice_with_the_headline(fakes):
     assert "-i|normal|-s|Run PTC: city data updated|-d|cart paths: 2 added" in notice
 
 
-def test_a_failed_job_alerts_and_the_other_still_runs(fakes):
-    code, out, sent = run(fakes, FAKE_SYNC_CODE="1",
-                          FAKE_SYNC_OUT="Traceback\\nRuntimeError: Intervals said no",
-                          FAKE_REFRESH_OUT="city data unchanged")
+def test_a_failed_job_alerts_with_the_cause_and_the_other_still_runs(fakes):
+    code, out, sent = run(
+        fakes, FAKE_SYNC_CODE="1",
+        # The shape of a real failure: a generic log line, the traceback, then
+        # the CLI's one-line summary.
+        FAKE_SYNC_OUT="ERROR app.jobs: job 16 failed\\nTraceback (most recent call last):\\n"
+                      "  File /app/app/jobs.py, line 37, in run\\n"
+                      "httpx.HTTPStatusError: Client error '401 Unauthorized'\\n"
+                      "sync failed (job 16): HTTPStatusError: Client error '401 Unauthorized'",
+        FAKE_REFRESH_OUT="city data unchanged")
     assert code == 1
     [alert] = sent
-    assert "-i|alert|-s|Run PTC: nightly sync failed|-d|RuntimeError: Intervals said no|-m|" in alert
+    cause = "sync failed (job 16): HTTPStatusError: Client error '401 Unauthorized'"
+    assert f"-i|alert|-s|Run PTC: nightly sync failed|-d|{cause}|-m|" in alert
+    assert "(container run-ptc, exit code 1)" in alert
+    assert f"Cause: {cause}" in alert
     assert "=== refresh" in out
+
+
+def test_a_missing_container_says_so(fakes):
+    code, _, sent = run(fakes, CONTAINER="run-ptc-gone", FAKE_SYNC_CODE="1",
+                        FAKE_SYNC_OUT="Error response from daemon: No such container: run-ptc-gone",
+                        FAKE_REFRESH_OUT="city data unchanged")
+    [alert] = sent
+    assert "-d|Container run-ptc-gone isn't running or doesn't exist, so nothing ran.|" in alert
+
+
+def test_a_long_cause_is_shortened_in_the_description_but_kept_in_the_body(fakes):
+    cause = "sync failed (job 3): HTTPStatusError: Client error for url '" + "x" * 200 + "'"
+    _, _, sent = run(fakes, FAKE_SYNC_CODE="1", FAKE_SYNC_OUT=cause, FAKE_REFRESH_OUT="city data unchanged")
+    [alert] = sent
+    description = alert.split("|-d|")[1].split("|-m|")[0]
+    assert len(description) == 160 and description.endswith("...")
+    assert f"Cause: {cause}" in alert
+
+
+def test_an_unrecognized_failure_uses_the_last_line(fakes):
+    _, _, sent = run(fakes, FAKE_REFRESH_CODE="1", FAKE_REFRESH_OUT="something odd\\nlast words\\n")
+    [alert] = sent
+    assert "-d|last words|" in alert
 
 
 def test_a_busy_job_warns(fakes):

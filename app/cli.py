@@ -29,11 +29,19 @@ def _run_job(job: str, fn: JobFn) -> int:
     with db.connect() as conn:
         db.migrate(conn)
     try:
-        lines = start_job(job, "cli").run(fn)
+        running = start_job(job, "cli")
     except JobBusy:
         print("another job is running (sync, import, refresh, or recompute); try again when it finishes",
               file=sys.stderr)
         return EXIT_BUSY
+    try:
+        lines = running.run(fn)
+    except Exception as e:
+        # The traceback is already logged above. End with one clean line, the
+        # same error job_run records, for alerts and anyone reading the log.
+        cause = (str(e).splitlines() or [""])[0]
+        print(f"{job} failed (job {running.id}): {type(e).__name__}: {cause}", file=sys.stderr)
+        return 1
     print("\n".join(lines))
     return 0
 
