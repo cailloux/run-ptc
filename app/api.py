@@ -1,18 +1,41 @@
 from typing import Literal
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response
+from pydantic import BaseModel, Field
 
 from app import db
 from app.config import intervals_credentials, load_settings
 from app.coverage import coverage_geojson
+from app.graph import main_component
 from app.intervals import IntervalsClient
 from app.jobs import JobBusy, last_runs, start_job
 from app.matching import METERS_PER_MILE, metrics
+from app.routing import GraphMissing, RouteError, leg, snap
 from app.sync import sync, sync_window
 
 router = APIRouter()
 
 LayerName = Literal["cartpath", "road"]
+
+
+class LatLon(BaseModel):
+    lat: float = Field(ge=-90, le=90)
+    lon: float = Field(ge=-180, le=180)
+
+
+class LegRequest(BaseModel):
+    start: LatLon = Field(alias="from")
+    end: LatLon = Field(alias="to")
+
+
+def _route_errors(fn):
+    """Map routing failures onto HTTP: the click was bad (422) or the graph is missing (503)."""
+    try:
+        return fn()
+    except RouteError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except GraphMissing as e:
+        raise HTTPException(status_code=503, detail=str(e))
 
 
 def _geojson(sql: str, params: tuple | dict) -> Response:
@@ -101,6 +124,62 @@ def activities() -> Response:
             ) ORDER BY start_at), '[]'::json))::text
         FROM activity WHERE status = 'city'
     """, ())
+
+
+@router.post("/route/snap")
+def route_snap(point: LatLon) -> dict:
+    """Where a click lands on the network: the start of a route."""
+    max_m = load_settings().route_snap_max_m
+    with db.connect() as conn:
+        s = _route_errors(lambda: snap(conn, point.lat, point.lon, max_m))
+    return {"lat": s.lat, "lon": s.lon}
+
+
+@router.post("/route/leg")
+def route_leg(body: LegRequest) -> dict:
+    """Shortest path along paths and roads from one clicked point to another."""
+    max_m = load_settings().route_snap_max_m
+    with db.connect() as conn:
+        r = _route_errors(lambda: leg(conn, (body.start.lat, body.start.lon),
+                                      (body.end.lat, body.end.lon), max_m))
+    return {
+        "latlngs": r.latlngs,
+        "length_m": round(r.length_m, 1),
+        "from": {"lat": r.start.lat, "lon": r.start.lon},
+        "to": {"lat": r.end.lat, "lon": r.end.lon},
+    }
+
+
+@router.get("/graph/islands")
+def graph_islands() -> Response:
+    """Edges not connected to the main network, for review."""
+    with db.connect() as conn:
+        main = main_component(conn)
+        body = conn.execute("""
+            WITH island AS (
+                SELECT v.component, sum(e.cost) AS length_m
+                FROM route_edge e JOIN route_vertex v ON v.id = e.source
+                WHERE v.component IS DISTINCT FROM %(main)s
+                GROUP BY v.component
+            )
+            SELECT json_build_object('type', 'FeatureCollection', 'features',
+                coalesce(json_agg(json_build_object(
+                    'type', 'Feature',
+                    'geometry', ST_AsGeoJSON(ST_Transform(e.geom, 4326), 6)::json,
+                    'properties', json_build_object(
+                        'component', i.component,
+                        'island_length_m', round(i.length_m::numeric),
+                        'layer', s.layer,
+                        'source_oid', s.source_oid,
+                        'name', s.name,
+                        'seg_type', s.seg_type)
+                ) ORDER BY i.component, e.id), '[]'::json))::text
+            FROM route_edge e
+            JOIN route_vertex v ON v.id = e.source
+            JOIN island i ON i.component = v.component
+            JOIN segment s ON s.id = e.segment_id
+        """, {"main": main}).fetchone()[0]
+    return Response(body, media_type="application/geo+json")
 
 
 @router.get("/sync")
