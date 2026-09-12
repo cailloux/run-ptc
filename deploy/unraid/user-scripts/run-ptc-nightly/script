@@ -18,7 +18,7 @@
 CONTAINER="${CONTAINER:-run-ptc}"      # the Run PTC app container
 NOTIFY="${NOTIFY:-/usr/local/emhttp/webGui/scripts/notify}"   # Unraid's notify command
 TEST_ALERT="${TEST_ALERT:-0}"          # 1: send one test alert and exit
-ALERT_LINES="${ALERT_LINES:-30}"       # lines of job output included in an alert
+ALERT_LINES="${ALERT_LINES:-15}"       # lines of job output included in an alert
 # -----------------------------------------------------------------------------
 
 EXIT_BUSY=75   # the CLI's "another job is running" exit code
@@ -36,8 +36,33 @@ if [ "$TEST_ALERT" = "1" ]; then
 fi
 
 OUTPUT=""
+
+# One line saying why a job failed.
+failure_cause() {  # job
+  local cause
+  # The CLI ends a failed job with "<job> failed (job N): <error>".
+  cause=$(printf '%s\n' "$OUTPUT" | grep -m1 "^$1 failed" || true)
+  if [ -z "$cause" ] && printf '%s\n' "$OUTPUT" | grep -q "Error response from daemon"; then
+    cause="Container $CONTAINER isn't running or doesn't exist, so nothing ran."
+  fi
+  [ -n "$cause" ] || cause=$(printf '%s\n' "$OUTPUT" | grep -v '^[[:space:]]*$' | tail -n 1)
+  printf '%s' "${cause:-no output}"
+}
+
+failure_body() {  # job exit-code cause
+  printf '%s\n' \
+    "The nightly $1 job failed on $(date '+%Y-%m-%d at %H:%M') (container $CONTAINER, exit code $2)." \
+    "" \
+    "Cause: $3" \
+    "" \
+    "Full output is in the run-ptc-nightly log in User Scripts; every run is also recorded in the app's job_run table." \
+    "" \
+    "Last lines of output:" \
+    "$(printf '%s\n' "$OUTPUT" | tail -n "$ALERT_LINES")"
+}
+
 run_job() {  # job -> the job's exit code; its output is left in OUTPUT
-  local job=$1 code
+  local job=$1 code cause
   echo "=== $job ($(date '+%Y-%m-%d %H:%M'))"
   OUTPUT=$(docker exec "$CONTAINER" python -m app.cli "$job" 2>&1)
   code=$?
@@ -46,10 +71,11 @@ run_job() {  # job -> the job's exit code; its output is left in OUTPUT
     notify warning "Run PTC: nightly $job skipped" \
       "Another job was running; $job will run again tomorrow night."
   elif [ "$code" -ne 0 ]; then
-    local first
-    first=$(printf '%s\n' "$OUTPUT" | grep -m1 -iE 'error|exception|failed|refusing' || true)
-    notify alert "Run PTC: nightly $job failed" "${first:-exit code $code}" \
-      "$(printf '%s\n' "$OUTPUT" | tail -n "$ALERT_LINES")"
+    cause=$(failure_cause "$job")
+    # The description is a one-line summary; the body keeps the full cause.
+    local short=$cause
+    [ "${#short}" -gt 160 ] && short="${short:0:157}..."
+    notify alert "Run PTC: nightly $job failed" "$short" "$(failure_body "$job" "$code" "$cause")"
   fi
   return "$code"
 }

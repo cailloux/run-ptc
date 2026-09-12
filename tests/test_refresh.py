@@ -148,6 +148,19 @@ def test_long_lists_are_capped(conn, city):
 # ---- CLI exit codes -----------------------------------------------------------------
 
 
+def test_failed_jobs_end_with_one_clean_line(conn, db_url, monkeypatch, capsys):
+    monkeypatch.setenv("DATABASE_URL", db_url)
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("city server said no\nsecond line of detail")
+
+    monkeypatch.setattr(cli, "refresh", broken)
+    assert cli.main(["refresh"]) == 1
+    last = capsys.readouterr().err.strip().splitlines()[-1]
+    job_id = conn.execute("SELECT max(id) FROM job_run").fetchone()[0]
+    assert last == f"refresh failed (job {job_id}): RuntimeError: city server said no"
+
+
 def test_busy_jobs_exit_75(conn, db_url, monkeypatch):
     monkeypatch.setenv("DATABASE_URL", db_url)
     conn.execute("SELECT pg_advisory_lock(%s)", (JOB_LOCK,))
