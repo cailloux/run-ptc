@@ -224,7 +224,14 @@ Build the graph, review islands, then add click-to-route, retrace, undo/redo, di
 
 ### Phase 6: Automation
 
-Add the nightly sync and the monthly city refresh with its change report. Record every job run (start, finish, status, summary, error) in a job log. Schedule jobs so they check daily whether there's anything to do and only work when their data is out of date: the city refresh imports only when the layers have changed or a month has passed. That way a failed run retries itself the next day.
+Add the nightly sync and the city refresh with its change report. Record every job run (start, finish, status, summary, error) in a job log. Schedule jobs so they check daily whether there's anything to do and only work when their data is out of date. That way a failed run retries itself the next day.
+
+As built:
+
+- **Scheduling** is the Unraid User Scripts plugin, not the app: one nightly script (`deploy/unraid/user-scripts/run-ptc-nightly`, suggested 3:15 AM) runs `docker exec run-ptc python -m app.cli sync`, then `refresh`. The dev pair has no schedule.
+- **The refresh replaces a monthly timer.** The city layers publish no layer-level edit date, so each night one statistics request per layer fetches a signature: feature count, highest OID, and latest `last_edited_date`. A layer whose signature differs from the one stored at its last successful import (`source_signature`) is imported, the graph rebuilt, and the new signature stored. Signatures are written only after everything succeeds, so a failed night retries. `refresh --force` imports regardless. The roads layer appears to be re-saved in bulk now and then (every road carries an edit date within the past year), which just produces a harmless 0-change import.
+- **The change report** lists each added, changed, or removed segment (OID, name, type, length), then the impact before and after: cart path miles and segments complete, road miles covered, counted segments and miles per layer, second carriageways, and graph components and islands. It's the job's summary in `job_run`, the output in the User Scripts log, and the headline of the "city data updated" notice.
+- **Alerts** use Unraid's `notify`, which reaches email through Unraid's own notification settings: a failed job is an alert, a job skipped because another was running (CLI exit code 75) is a warning, and new city data is a normal notice. Quiet nights send nothing.
 
 ### Phase 7: Admin and data health
 

@@ -80,7 +80,7 @@ Store timestamps in UTC. Display them in US Eastern. Dates passed to Intervals a
 - Appdata path: `/mnt/user/appdata/run-ptc/`. The db data is in `pgdata/`, the dev pair (`scripts/kirk-dev.sh`) in `dev/`, and the synced source for tests in `src/`.
 - The dev pair (`run-ptc-dev` at http://192.168.50.2:8011, `run-ptc-dev-db`) is the standing development environment. Keep it running; don't tear it down after a phase. The user switches to the Unraid-managed containers manually.
 - The app applies pending migrations and reapplies exclusions on startup, and marks any `job_run` rows left `running` by a crash as interrupted.
-- Sync, import, and recompute share one advisory lock (`app/jobs.py`) whether started from the CLI or the map's Sync button, and each run is logged in `job_run`. Run new data jobs through `start_job(...).run(fn)`.
+- Sync, import, refresh, graph, and recompute share one advisory lock (`app/jobs.py`) whether started from the CLI or the map's Sync button, and each run is logged in `job_run`. Run new data jobs through `start_job(...).run(fn)`.
 - The app image has a `HEALTHCHECK` using curl against `/health`.
 - CI: GitHub Actions builds the image and pushes it to GHCR. Dependabot covers pip, Docker, and Actions.
 - Authelia and Traefik are not in v1. Don't add them unless asked.
@@ -111,6 +111,11 @@ ssh kirk docker exec run-ptc python -m app.cli recompute
 ssh kirk docker exec run-ptc python -m app.cli stats
 # rebuild the routing graph and list its islands (import also rebuilds it)
 ssh kirk docker exec run-ptc python -m app.cli graph
+# import any city layer the city has changed since the last import, with a change report
+# (--force imports regardless). Runs nightly from the User Script.
+ssh kirk docker exec run-ptc python -m app.cli refresh
 ```
+
+Nightly jobs run from the Unraid User Scripts template in `deploy/unraid/user-scripts/run-ptc-nightly`. It acts on CLI exit codes: `1` sends an alert, `75` (another job running) a warning.
 
 Use `run-ptc-dev` in place of `run-ptc` to target the dev pair.
