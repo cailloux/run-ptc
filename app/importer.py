@@ -88,6 +88,10 @@ class ImportReport:
     tiny_parts: list[tuple] = field(default_factory=list)   # (oid, part_idx, length_m)
     nodeless: list[int] = field(default_factory=list)       # counted oids with no nodes
     second_carriageways: list[int] = field(default_factory=list)   # oids not counted
+    # (oid, name, seg_type, length_m) per segment, for the change report.
+    added_segments: list[tuple] = field(default_factory=list)
+    changed_segments: list[tuple] = field(default_factory=list)   # geometry or counted status
+    removed_segments: list[tuple] = field(default_factory=list)
     second_carriageway_m: float = 0.0
     exclusion_warnings: list[str] = field(default_factory=list)
 
@@ -295,19 +299,24 @@ def import_layer(conn: psycopg.Connection, layer: Layer, features: list[dict],
             conn.execute("CREATE INDEX ON staging USING gist (geom)")
             _mark_second_carriageways(conn, settings, report)
 
-        changed_ids = [r[0] for r in conn.execute("""
-            SELECT s.id FROM segment s
+        changed = conn.execute("""
+            SELECT s.id, t.source_oid, t.name, t.seg_type, t.length_m FROM segment s
             JOIN staging t ON t.source_key = s.source_key
             WHERE s.layer = %s AND (s.geom_hash <> t.geom_hash OR s.counted <> t.counted)
-        """, (layer.name,))]
+            ORDER BY t.source_oid
+        """, (layer.name,)).fetchall()
+        changed_ids = [r[0] for r in changed]
+        report.changed_segments = [r[1:] for r in changed]
         report.changed = len(changed_ids)
 
-        report.removed = len(conn.execute("""
+        removed = conn.execute("""
             DELETE FROM segment s
             WHERE s.layer = %s
               AND NOT EXISTS (SELECT 1 FROM staging t WHERE t.source_key = s.source_key)
-            RETURNING s.id
-        """, (layer.name,)).fetchall())
+            RETURNING s.source_oid, s.name, s.seg_type, s.length_m
+        """, (layer.name,)).fetchall()
+        report.removed_segments = sorted(removed)
+        report.removed = len(removed)
 
         upserted = conn.execute("""
             INSERT INTO segment (layer, source_key, source_oid, name, seg_type, counted,
@@ -326,9 +335,10 @@ def import_layer(conn: psycopg.Connection, layer: Layer, features: list[dict],
                 geom_hash = EXCLUDED.geom_hash,
                 props = EXCLUDED.props,
                 geom = EXCLUDED.geom
-            RETURNING id, (xmax = 0) AS inserted
+            RETURNING id, (xmax = 0) AS inserted, source_oid, name, seg_type, length_m
         """, (layer.name,)).fetchall()
         added_ids = [r[0] for r in upserted if r[1]]
+        report.added_segments = sorted(r[2:] for r in upserted if r[1])
         report.added = len(added_ids)
 
         regenerate_nodes(conn, added_ids + changed_ids, settings)
