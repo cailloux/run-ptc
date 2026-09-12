@@ -33,6 +33,9 @@ def layer_signature(client: httpx.Client, layer_url: str, oid_field: str) -> Lay
     data = resp.json()
     if "error" in data:
         raise RuntimeError(f"ArcGIS error from {layer_url}: {data['error']}")
+    # The server has been seen to answer with no rows for a while, then recover.
+    if not data.get("features"):
+        raise RuntimeError(f"city server returned no statistics for {layer_url}; try again later")
     # ArcGIS sometimes changes the case of output field names.
     attrs = {k.lower(): v for k, v in data["features"][0]["attributes"].items()}
     edited_ms = attrs.get("max_edited")

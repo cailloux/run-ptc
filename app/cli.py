@@ -9,14 +9,14 @@ from datetime import date
 import httpx
 
 from app import db, exclusions
-from app.arcgis import fetch_features, layer_signature
+from app.arcgis import layer_signature
 from app.config import intervals_credentials, load_settings
 from app.graph import build_graph
 from app.importer import LAYERS, METERS_PER_MILE, import_layer
 from app.intervals import IntervalsClient
 from app.jobs import JobBusy, JobFn, start_job
 from app.matching import metrics, near_miss_lines, near_misses, recompute
-from app.refresh import refresh, store_signature
+from app.refresh import download, refresh, store_signature
 from app.sync import EASTERN, sync, sync_window
 
 
@@ -68,7 +68,7 @@ def cmd_import(args) -> int:
                 # Taken before the download, so an edit in between is caught
                 # by the next refresh rather than missed.
                 signatures[name] = layer_signature(client, layer.url, layer.oid_field)
-                features = fetch_features(client, layer.url, layer.oid_field)
+                features = download(client, layer, signatures[name])
                 lines += import_layer(conn, layer, features, settings, excl).lines()
         # City data changed, so the routing graph is rebuilt from it.
         lines += build_graph(conn, settings).lines()

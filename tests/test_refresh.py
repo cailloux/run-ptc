@@ -66,6 +66,14 @@ def test_layer_signature_raises_on_arcgis_errors():
         layer_signature(client, "https://gis.example/layer/3", "OBJECTID_1")
 
 
+def test_layer_signature_raises_when_the_server_returns_no_rows():
+    # Seen from the city server on 2026-09-12: the fields, but no features.
+    client = httpx.Client(transport=httpx.MockTransport(
+        lambda r: httpx.Response(200, json={"fields": [{"name": "n"}], "features": []})))
+    with pytest.raises(RuntimeError, match="returned no statistics"):
+        layer_signature(client, "https://gis.example/layer/3", "OBJECTID_1")
+
+
 # ---- refresh decisions ----------------------------------------------------------
 
 
@@ -87,12 +95,12 @@ def test_unchanged_city_imports_nothing(conn, city):
     assert report.lines() == [report.headline()]
 
 
-@pytest.mark.parametrize("change", [
-    {"feature_count": 99}, {"max_oid": 1}, {"max_edited_at": datetime(2026, 9, 1, tzinfo=UTC)}])
-def test_any_signature_change_imports_only_that_layer(conn, city, change):
+@pytest.mark.parametrize("column, value", [
+    ("feature_count", 99), ("max_oid", 1), ("max_edited_at", datetime(2026, 9, 1, tzinfo=UTC))])
+def test_any_signature_change_imports_only_that_layer(conn, city, column, value):
     city.run(conn)
     city.fetched.clear()
-    city.sigs["road"] = LayerSignature(**{**city.sigs["road"].__dict__, **change})
+    conn.execute(f"UPDATE source_signature SET {column} = %s WHERE layer = 'road'", (value,))
     report = city.run(conn)
     assert city.fetched == ["road"]
     assert report.headline() == "cart paths: unchanged; roads: 0 added, 0 changed, 0 removed"
@@ -108,7 +116,7 @@ def test_force_imports_every_layer(conn, city):
 def test_a_failed_refresh_keeps_the_old_signature_so_the_next_run_retries(conn, city):
     city.run(conn)
     old = stored_signature(conn, "road")
-    city.sigs["road"] = LayerSignature(5, 5000, EDITED)
+    city.sigs["road"] = LayerSignature(1, 5000, EDITED)
     city.fail.add("road")
     with pytest.raises(RuntimeError, match="road download failed"):
         city.run(conn)
@@ -140,9 +148,19 @@ def test_long_lists_are_capped(conn, city):
     city.run(conn)
     city.features["cartpath"] += [cartpath(100 + i, line((0, 300 + i * 10), (50, 300 + i * 10)))
                                   for i in range(LIST_CAP + 5)]
-    city.sigs["cartpath"] = LayerSignature(99, 9999, EDITED)
+    city.sigs["cartpath"] = LayerSignature(len(city.features["cartpath"]), 9999, EDITED)
     lines = city.run(conn).lines()
     assert "    … and 5 more" in lines
+
+
+def test_a_download_short_of_the_signature_count_is_refused(conn, city):
+    city.run(conn)
+    before = conn.execute("SELECT count(*) FROM segment").fetchone()[0]
+    # The city says 3 roads, but a page went missing and only 1 arrived.
+    city.sigs["road"] = LayerSignature(3, 5000, EDITED)
+    with pytest.raises(RuntimeError, match="road: downloaded 1 features but the city reports 3"):
+        city.run(conn)
+    assert conn.execute("SELECT count(*) FROM segment").fetchone()[0] == before
 
 
 # ---- CLI exit codes -----------------------------------------------------------------
