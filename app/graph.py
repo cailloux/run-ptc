@@ -2,9 +2,9 @@
 
 Rules are in docs/PLAN.md under "Routing graph". pgRouting 4.0 has no
 topology builder that fits them (pgr_separateTouching fails on this data and
-can join lines where they only cross), so two steps are our own SQL:
-splitting lines where another line ends on them, and snapping nearby ends.
-pgRouting assigns the junctions and finds the islands.
+can't tell a tunnel from an at-grade crossing), so two steps are our own
+SQL: splitting lines at T-junctions and at-grade crossings, and snapping
+nearby ends. pgRouting assigns the junctions and finds the islands.
 """
 
 from dataclasses import dataclass, field
@@ -66,8 +66,7 @@ def build_graph(conn: psycopg.Connection, settings: Settings) -> GraphReport:
         conn.execute("ANALYZE g_part")
 
         # 2. T-junctions: where a part's end lands on another part's middle,
-        #    split that part there. Only ends split lines; lines that merely
-        #    cross (tunnels under roads, bridges over them) never join.
+        #    split that part there.
         conn.execute("""
             CREATE TEMP TABLE g_cut ON COMMIT DROP AS
             SELECT DISTINCT p.pid, round(ST_LineLocatePoint(p.geom, e.pt)::numeric, 6)::float8 AS f
@@ -76,6 +75,23 @@ def build_graph(conn: psycopg.Connection, settings: Settings) -> GraphReport:
               AND ST_Distance(e.pt, ST_EndPoint(p.geom)) > %(snap)s
               -- A road ending on a tunnel or bridge is above or below it.
               AND NOT (e.layer = 'road' AND p.seg_type IN ('Tunnel', 'Bridge'))
+        """, {"snap": snap})
+        #    At-grade crossings join too: both lines split where they cross,
+        #    unless either is a tunnel or bridge (one passes over the other).
+        #    A line whose own end is already at the crossing isn't split.
+        conn.execute("""
+            INSERT INTO g_cut (pid, f)
+            SELECT DISTINCT q.pid, round(ST_LineLocatePoint(q.geom, x.pt)::numeric, 6)::float8
+            FROM (
+                SELECT a.pid AS pa, b.pid AS pb, (ST_Dump(ST_Intersection(a.geom, b.geom))).geom AS pt
+                FROM g_part a JOIN g_part b ON a.pid < b.pid AND ST_Crosses(a.geom, b.geom)
+                WHERE coalesce(a.seg_type, '') NOT IN ('Tunnel', 'Bridge')
+                  AND coalesce(b.seg_type, '') NOT IN ('Tunnel', 'Bridge')
+            ) x
+            JOIN g_part q ON q.pid IN (x.pa, x.pb)
+            WHERE GeometryType(x.pt) = 'POINT'
+              AND ST_Distance(x.pt, ST_StartPoint(q.geom)) > %(snap)s
+              AND ST_Distance(x.pt, ST_EndPoint(q.geom)) > %(snap)s
         """, {"snap": snap})
         conn.execute("""
             CREATE TEMP TABLE g_piece ON COMMIT DROP AS

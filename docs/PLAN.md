@@ -139,13 +139,13 @@ Multipart segments are exploded so each part (1 m or longer) becomes its own edg
 
 - **Ends join ends.** Line ends within 3 m of each other (`graph_snap_m`) snap onto one shared junction.
 - **Ends split lines.** An end that lands within 3 m of another line's middle splits that line there, making a T-junction. This applies to cart paths as well as roads: the city rarely breaks a through path at a junction, and 393 cart paths meet another cart path mid-line. Splitting only roads, as first specified, left 68 components and 19.7 mi stranded. As a guard, tunnels and bridges are never split by a road's end.
-- **Crossings never join.** Lines that merely cross stay apart, because tunnels pass under roads and bridges pass over them. Splitting at every crossing would let the router turn from a tunnel onto the road above it.
+- **At-grade crossings join; tunnels and bridges never do.** Where two lines cross and neither is a Tunnel or Bridge, both split at the crossing and share a junction: 8 road intersections the city drew as through lines (Archway Ln × Gates Entry had made Gates Entry an island), 273 path-road crosswalks, and 8 path-path crossings. The 57 crossings involving a tunnel or bridge stay apart, so the router can never turn from a tunnel onto the road above it. (The original rule, that no crossing joins, was meant for tunnels and bridges but also cut those at-grade intersections.)
 
-pgRouting 4.0 has no topology builder that fits these rules. `pgr_separateTouching` failed on this data (16 overlapping road pairs) and can split lines where they only cross. So the T-junction split and the end snapping are our own SQL (`app/graph.py`), while pgRouting assigns junctions (`pgr_extractVertices`) and finds islands (`pgr_connectedComponents`). The build takes under a second and runs after every city import, or on demand with `python -m app.cli graph`.
+pgRouting 4.0 has no topology builder that fits these rules. `pgr_separateTouching` failed on this data (16 overlapping road pairs) and can't tell a tunnel from an at-grade crossing. So the splitting and the end snapping are our own SQL (`app/graph.py`), while pgRouting assigns junctions (`pgr_extractVertices`) and finds islands (`pgr_connectedComponents`). The build takes under a second and runs after every city import, or on demand with `python -m app.cli graph`.
 
 Each edge also records the stretch of its segment's part that it covers (`part_from`, `part_to`), which maps nodes onto edges. That's what a future "finish these segments for me" planner needs: the graph is a standard pgRouting edges table, so `pgr_dijkstraCostMatrix`, `pgr_TSP`, and `pgr_dijkstraVia` (all installed) can run on it directly.
 
-As of Sept 2026 the graph has 5,078 edges, 4,137 junctions, and 9 components: a main network of 380.9 mi plus 8 islands totaling 1.72 mi, which are shown on the map for review.
+As of Sept 2026 the graph has 5,652 edges, 4,424 junctions, and 8 components: a main network of 381.2 mi plus 7 islands totaling 1.39 mi, which are shown on the map for review.
 
 ## Route builder
 

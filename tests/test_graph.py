@@ -49,11 +49,40 @@ def test_t_junction_within_tolerance_but_not_touching(conn):
     assert len(edges(conn)) == 3
 
 
-def test_crossing_lines_never_join(conn):
+def test_a_road_over_a_tunnel_never_joins(conn):
     report = graph(conn, cartpaths=[cartpath(1, line((0, 0), (100, 0)), type_="Tunnel")],
                    roads=[road(1, line((50, -50), (50, 50)))])
     assert report.components == 2
     assert len(edges(conn)) == 2
+
+
+def test_a_path_under_a_bridge_never_joins(conn):
+    report = graph(conn, [cartpath(1, line((0, 0), (100, 0)), type_="Bridge"),
+                          cartpath(2, line((50, -50), (50, 50)))])
+    assert report.components == 2
+
+
+def test_roads_crossing_at_grade_join(conn):
+    report = graph(conn, roads=[road(1, line((0, 0), (100, 0))), road(2, line((50, -50), (50, 50)))])
+    assert report.components == 1
+    assert [e[4] for e in edges(conn)] == [50.0, 50.0, 50.0, 50.0]
+
+
+def test_a_path_crossing_a_road_at_grade_joins(conn):
+    report = graph(conn, cartpaths=[cartpath(1, line((0, 0), (100, 0)), type_="Road Crossing")],
+                   roads=[road(1, line((50, -50), (50, 50)))])
+    assert report.components == 1
+    assert len(edges(conn)) == 4
+
+
+def test_a_crossing_at_a_line_end_splits_only_the_other_line(conn):
+    # Road 2 crosses road 1 just 2 m from road 2's own end, so road 2 isn't
+    # split; its end snaps onto the junction at the crossing (the centroid of
+    # the three ends there, 0.67 m below road 1), leaving a 50.7 m edge.
+    report = graph(conn, roads=[road(1, line((0, 0), (100, 0))), road(2, line((50, -2), (50, 50)))])
+    assert report.components == 1
+    assert [(e[0], e[4]) for e in edges(conn)] == [
+        ("road:1", 50.0), ("road:1", 50.0), ("road:2", 50.7)]
 
 
 def test_a_road_ending_on_a_tunnel_does_not_connect(conn):
