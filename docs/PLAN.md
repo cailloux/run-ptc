@@ -12,7 +12,7 @@ A single-user planning tool on kirk. It shows where you have and haven't run acr
 | Activities | Runs only, pulled from the Intervals.icu API, full history backfilled. |
 | Cart paths that count | Path, Bridge, Tunnel, including private segments. 780 segments, 103.6 mi as of Sept 2026, after removing duplicates. |
 | Cart paths that don't count | Walking Path, Road Crossing, Road Entrance Exit, Parking Lot, Park, and any other types. They stay in the routing graph. |
-| Roads that count | All centerlines inside Peachtree City (`City = PEACHTREE CITY`), including private roads and state routes (state routes assumed). 2,496 segments, 269.1 mi, after removing duplicates and slivers. |
+| Roads that count | All centerlines inside Peachtree City (`City = PEACHTREE CITY`), including private roads and state routes (state routes assumed), with divided roads counted once. 2,392 segments, 248.5 mi, after removing duplicates, slivers, and second carriageways. |
 | Cart path completion | A segment is complete when 100% of its nodes are hit. |
 | Tunnels | Credited when both ends are hit in the same run. |
 | Headline metric | Cart path miles complete. |
@@ -39,7 +39,9 @@ The raw layers need four corrections before anything is counted:
 - **Lengths.** Every length is computed from geometry. Never read the city's length attributes (`LengthMile`, `LENGTH`, `Length`, `Shape.STLength()`). They're null, zero, or in other units on many features; the original 263 mi road figure came from one of them.
 - **Outside the city.** The road layer includes 6 features outside Peachtree City (`City` is TYRONE, SENOIA, or Unknown). They're imported with `counted = false`, so they're usable for routing but don't count. This is a data rule, not an exclusion.
 
-After clean-up: 1,528 cart path features stored (780 counted, 103.6 mi) and 2,500 roads stored (2,496 counted, 269.1 mi). Totals measured in UTM may differ by about 0.1 mi.
+- **Divided roads.** SR-74 (N and S), SR-54, N and S Peachtree Pkwy, and MacDuff Pkwy (`divided_roads` in settings) are drawn as two carriageways 12–16 m apart. Only one carriageway counts: a segment lying at least 80% within 40 m of an already-kept segment of the same road, which it doesn't touch, is its twin. Longest chains of touching segments go first, so where the carriageways are separate chains one whole side is kept; MacDuff's connect, so it's paired segment by segment. Twins get `counted = false` with `uncounted_reason = 'second carriageway'`, keep no nodes, stay routable, and on the map show the kept side's coverage (each point borrows the nearest counted node's status). The kept side gets the wide match radius so running the far sidewalk still completes it. As of Sept 2026 this marks 104 segments, 20.6 mi.
+
+After clean-up: 1,528 cart path features stored (780 counted, 103.6 mi) and 2,500 roads stored (2,392 counted, 248.5 mi). Totals measured in UTM may differ by about 0.1 mi. Every uncounted segment records why in `uncounted_reason`: `type`, `outside city`, or `second carriageway`.
 
 The Intervals.icu athlete ID and API key come from environment variables, as in fitness-api.
 
@@ -55,6 +57,7 @@ All geometry is stored in EPSG:32616 (UTM 16N), so buffers and lengths are in me
 
 ```
 segment          id, layer (cartpath | road), source_key, source_oid, name, seg_type,
+                 uncounted_reason,
                  counted, excluded, exclusion_reason, length_m, source_edited_at,
                  geom_hash, props, geom (MultiLineString)
 source_duplicate layer, dropped_key, canonical_key
@@ -62,7 +65,7 @@ node             id, segment_id, part_idx, seq, radius_m, hit_activity_id, hit_a
 activity         id, intervals_id, start_at, sport, name, distance_m, source, status
                  (city | outside | no_gps), track_raw (LineString), geom (MultiLineString),
                  synced_at
-route_edge       id, source, target, cost, reverse_cost, segment_id, part_idx,
+route_edge       id, source, target, length_m, cost, reverse_cost, segment_id, part_idx,
                  part_from, part_to, geom (LineString)
 route_vertex     id, component, geom (Point)
 ```
@@ -147,13 +150,17 @@ Each edge also records the stretch of its segment's part that it covers (`part_f
 
 As of Sept 2026 the graph has 5,652 edges, 4,424 junctions, and 8 components: a main network of 381.2 mi plus 7 islands totaling 1.39 mi, which are shown on the map for review.
 
+**Routes prefer cart paths alongside roads.** A road edge with a cart path (not a tunnel or bridge) within the road's own match radius along at least 80% of its length costs `route_parallel_road_factor` (3) times its length, so the router takes the path. Because the path lies within the road's match radius, running it still completes the road. `cost` carries the preference and `length_m` the true length, which every displayed distance uses. As of Sept 2026, 659 road edges (37.1 mi) have a path alongside.
+
 ## Route builder
 
 The route is a start point plus an ordered list of legs, and each leg holds its geometry and length. The coverage layer stays visible underneath, so unrun segments are obvious while you draw.
 
 **Click to route.** Each click snaps to the nearest edge and routes from the end of the current route using `pgr_withPoints`. That routes from the exact clicked point on the line, not the nearest intersection. Routing to the nearest intersection is what creates the extra spurs other route builders add on out-and-backs.
 
-**Retrace.** "Retrace to start" appends a reversed copy of the whole route. Shift-clicking an earlier point on the route appends a reversed copy back to that point. Retracing copies the existing geometry and never calls the router, so it can't drift or add spurs.
+**Waypoints and dragging.** Every click is a waypoint marker. While planning, dragging a waypoint reroutes the legs on either side of it; retraces that follow are rebuilt from the new geometry, and the leg after a moved turnaround reroutes too. A drag dropped too far from any path or road reverts, and each drag is one undo step.
+
+**Retrace.** "Retrace to start" appends a reversed copy of the whole route. Shift-clicking an earlier point on the route appends a reversed copy back to that point, and the point becomes a waypoint (the leg is split there, not rerouted), so the turnaround can be dragged later. Retracing copies the existing geometry and never calls the router, so it can't drift or add spurs.
 
 **Undo and redo.** Every edit (click, retrace, clear) pushes a snapshot onto a history stack. Undo and redo step through it with buttons or Ctrl+Z / Ctrl+Shift+Z. Clear is undoable too.
 
@@ -229,7 +236,7 @@ Modeled on the Plane States admin page, minus its auth:
 
 ### Phase 8: UI design and polish
 
-One holistic design pass over the whole UI once every feature is in place, instead of styling each phase piecemeal: layout (a fixed sidebar was deferred from Phase 4), typography, the coverage palette in context, legend and layer controls, and the route builder's controls.
+One holistic design pass over the whole UI once every feature is in place, instead of styling each phase piecemeal: layout (a fixed sidebar was deferred from Phase 4), typography, the coverage palette in context, legend and layer controls, and the route builder's controls. Also consider collapsing each divided road to a single line on the map (a centerline between the carriageways) for both coverage and nodes; today both carriageways show the kept side's coverage and nodes sit on the kept side.
 
 Each phase can be verified on the map before the next builds on it. Routing comes last because it doesn't depend on coverage, and graph topology is the fiddliest part to get right.
 
