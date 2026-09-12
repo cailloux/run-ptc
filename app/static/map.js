@@ -1,8 +1,14 @@
 const map = L.map('map', { preferCanvas: true }).setView([33.39, -84.57], 13);
 
-L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
-  attribution: 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap contributors',
-  maxNativeZoom: 16,
+// OpenStreetMap's standard tiles, used within the OSMF tile policy
+// (https://operations.osmfoundation.org/policies/tiles/): visible
+// attribution, the browser's normal Referer, no bulk or prefetching. They're
+// shown in grayscale (style.css) so OSM's orange roads and green parks don't
+// compete with the coverage colors, which were validated against this gray.
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  className: 'basemap',
+  maxNativeZoom: 19,
   maxZoom: 20,
 }).addTo(map);
 
