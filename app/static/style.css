@@ -31,6 +31,11 @@ body { font: 13px/1.4 system-ui, sans-serif; }
 #route-message { color: #52514e; }
 #route-message.error { color: #b3261e; }
 .leaflet-container.routing { cursor: crosshair; }
+.waypoint { border-radius: 50%; box-sizing: border-box; background: #fff; border: 3px solid #e87ba4;
+            box-shadow: 0 0 0 1.5px #fff, 0 1px 3px rgba(0, 0, 0, 0.4); }
+.waypoint.start { background: #1a1a19; border-color: #fff; }
+.waypoint.end { background: #e87ba4; border-color: #fff; }
+.leaflet-marker-draggable.waypoint { cursor: grab; }
 
 #legend > div { margin-bottom: 2px; }
 .legend-note { color: #77766f; }
