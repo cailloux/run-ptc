@@ -20,6 +20,17 @@ cartpath_counted_types: [Path, Bridge, Tunnel]
 # Roads count only when their City attribute equals this.
 road_counted_city: PEACHTREE CITY
 
+# Divided roads drawn as two carriageways. Only one carriageway counts (and
+# gets nodes, with the wide match radius so either sidewalk completes it);
+# the other is still routable and shows the same coverage on the map.
+divided_roads:
+  - N HIGHWAY 74
+  - S HIGHWAY 74
+  - W HIGHWAY 54
+  - N PEACHTREE PKWY
+  - S PEACHTREE PKWY
+  - MACDUFF PKWY
+
 # Intervals.icu activity types synced as runs. VirtualRun (treadmill apps) is left out.
 sync_run_types: [Run, TrailRun]
 
@@ -50,3 +61,8 @@ graph_snap_m: 3
 
 # Route builder: a click farther than this from any path or road is refused.
 route_snap_max_m: 50
+
+# Routing cost multiplier for road stretches with a cart path running
+# alongside (within the road's match radius), so routes take the path.
+# Running the path still completes the road. Distances shown stay true.
+route_parallel_road_factor: 3

@@ -28,11 +28,14 @@ class Settings:
     match_radius_wide_road_classes: tuple[str, ...]
     graph_snap_m: float
     route_snap_max_m: float
+    divided_roads: tuple[str, ...]
+    route_parallel_road_factor: float
 
 
 def load_settings(path: Path = CONFIG_DIR / "settings.yaml") -> Settings:
     data = yaml.safe_load(path.read_text())
-    for key in ("cartpath_counted_types", "sync_run_types", "match_radius_wide_road_classes"):
+    for key in ("cartpath_counted_types", "sync_run_types", "match_radius_wide_road_classes",
+                "divided_roads"):
         data[key] = tuple(data[key])
     if isinstance(data.get("sync_backfill_start"), str):
         data["sync_backfill_start"] = date.fromisoformat(data["sync_backfill_start"])
