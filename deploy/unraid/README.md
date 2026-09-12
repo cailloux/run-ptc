@@ -27,8 +27,10 @@ scheduled jobs are User Scripts (see `user-scripts/`).
 
 6. Open `http://kirk:8010` and check the totals against the dev pair.
 7. Install the nightly job from `user-scripts/run-ptc-nightly` (see that
-   README), run it once with `TEST_ALERT=1` to confirm alerts reach you, then
-   set it back to `0`.
+   README) with `APP_URL=http://kirk:8010`, run it once with `TEST_ALERT=1`
+   to confirm alerts reach you, then set it back to `0`.
+8. The next morning, `http://kirk:8010/status.html` should show both sources
+   current and the nightly script's last run.
 
 Secrets are entered in the Unraid UI only; the templates in git hold
 placeholders.
