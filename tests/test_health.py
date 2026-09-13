@@ -4,7 +4,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from app import cli
+from app import cli, db
 from app.health import FIELD_SEP, RECORD_SEP, alerts, mark_sent, source_health
 from app.jobs import JOB_LOCK
 from tests.helpers import SETTINGS, cartpath, line, road, run_import
@@ -53,6 +53,19 @@ def test_a_running_job_doesnt_hide_the_last_result(conn):
     job(conn, "sync", "failed", NOW - HOUR, error="boom")
     job(conn, "sync", "running", NOW)
     assert state(conn, "sync") == "failing"
+
+
+def test_the_running_job_is_reported_only_while_the_lock_is_held(conn, db_url):
+    job(conn, "refresh", "running", NOW, trigger="button")
+    assert source_health(conn, SETTINGS, "city", NOW).running is None   # left by a crash
+    with db.connect(db_url) as other:
+        other.execute("SELECT pg_advisory_lock(%s)", (JOB_LOCK,))
+        h = source_health(conn, SETTINGS, "city", NOW).as_dict()
+        sync_running = source_health(conn, SETTINGS, "sync", NOW).running
+        other.execute("SELECT pg_advisory_unlock(%s)", (JOB_LOCK,))
+    assert h["running"] is True
+    assert (h["running_job"]["job"], h["running_job"]["trigger"]) == ("refresh", "button")
+    assert sync_running is None   # another source's job
 
 
 def test_city_counts_both_refresh_and_import(conn):
