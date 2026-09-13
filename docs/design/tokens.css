@@ -1,0 +1,162 @@
+/* Run PTC design tokens — plain CSS custom properties, light theme only.
+   Drop in as app/static/tokens.css and load it before style.css.
+   Palette A ("Ember") is active; palette B ("Graphite") is at the bottom,
+   commented out — swap the block to switch. The map line colours are
+   duplicated as JS-side constants in map.js; keep the two in step. */
+
+:root {
+  /* ---- type -------------------------------------------------------------- */
+  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --text-micro: 11px;    /* uppercase section labels, attribution */
+  --text-small: 12.5px;  /* secondary lines, help text */
+  --text-body: 14px;     /* base */
+  --text-label: 13px;    /* table cells, dl values, popup rows */
+  --text-subhead: 15px;  /* card titles */
+  --text-title: 16px;    /* page title */
+  --text-number: 22px;   /* completion % in the top bar */
+  --text-number-lg: 24px;/* route distance */
+  --text-display: 38px;  /* share page headline number */
+
+  --leading-tight: 1.2;
+  --leading-body: 1.45;
+  --tracking-caps: .11em;   /* wordmark, uppercase labels */
+  --tracking-tight: -.02em; /* big numbers */
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* ---- colour: ink and surfaces ------------------------------------------ */
+  --color-text: #1b1a18;
+  --color-text-muted: #5c5a54;
+  --color-text-faint: #85837c;
+  --color-text-invert: #ffffff;
+
+  --color-surface: #ffffff;
+  --color-surface-sunken: #f4f3f0;   /* page ground on the status page */
+  --color-surface-hover: #f4f3f0;
+  --color-surface-dark: #1b1a18;     /* planning bar */
+  --color-surface-dark-raised: #26241f;
+  --color-basemap: #efefef;          /* grayscale OSM land */
+
+  --color-border: #dcd9d2;
+  --color-border-strong: #c9c6bf;    /* inputs */
+  --color-border-subtle: #e7e4de;    /* table rules, inner dividers */
+  --color-border-dark: #3a3833;      /* on the planning bar */
+
+  /* ---- colour: status (never used for map lines) ------------------------- */
+  --color-ok: #0d5c40;
+  --color-ok-bg: #e4f3ec;
+  --color-ok-border: #9cd0ba;
+  --color-warn: #6b5200;
+  --color-warn-accent: #c98a00;
+  --color-warn-bg: #fff7e0;
+  --color-warn-border: #e8c26a;
+  --color-danger: #7a1911;
+  --color-danger-accent: #b3261e;
+  --color-danger-bg: #fdeceb;
+  --color-danger-border: #e39a94;
+  --color-running: #123e73;
+  --color-running-accent: #1c5cab;
+  --color-running-bg: #e7eef8;
+  --color-running-border: #a8c0e0;
+
+  /* ---- colour: coverage palette B "Graphite" (active) -------------------- */
+  /* Everything finished is gray; colour means unfinished. */
+  --map-cartpath-complete: #6b6862;
+  --map-cartpath-run: #34332f;
+  --map-cartpath-not-run: #ff3b1f;
+  --map-road-run: #c4c1ba;
+  --map-road-not-run: #ffb01f;
+  --map-excluded: #9a978f;
+  --map-uncounted: #dedcd6;
+  --map-node-missed-fill: #ffffff;
+  --map-node-missed-road-fill: #ffb01f;
+  --map-node-ring: #2b2a27;
+  --map-node-hit: #333333;
+  --map-change-band: #9fd8ff;
+  --map-track: #e6550d;
+  --map-island: #111111;
+
+  --map-route-new: #1b6ef3;      /* route over ground not yet run */
+  --map-route-known: #9dc2fb;    /* route over ground already run */
+  --map-route-casing: #ffffff;
+  --map-meter-cartpath: #34332f;   /* completion meters: ink, not a map colour */
+  --map-meter-road: #8b8983;
+  --map-route-tint: #eef4ff;     /* planning-mode surfaces */
+  --map-route-tint-border: #b9d2fb;
+  --map-route-tint-text: #123e73;
+
+  /* line weights, mirrored in map.js */
+  --map-w-cartpath-complete: 2;
+  --map-w-cartpath-run: 2.5;
+  --map-w-cartpath-not-run: 5;
+  --map-w-road-run: 1.5;
+  --map-w-road-not-run: 3;
+  --map-w-excluded: 2.5;
+  --map-w-uncounted: 1.5;
+  --map-w-route: 5;
+  --map-w-route-casing: 11;
+  --map-w-change-band: 12;
+
+  /* ---- space ------------------------------------------------------------- */
+  --space-1: 4px;
+  --space-2: 6px;
+  --space-3: 8px;
+  --space-4: 10px;
+  --space-5: 12px;
+  --space-6: 14px;
+  --space-7: 16px;
+  --space-8: 20px;
+  --space-9: 24px;
+  --space-10: 32px;
+
+  --bar-height: 56px;        /* top bar and route bar */
+  --drawer-width: 305px;
+  --elevation-height: 78px;
+  --tap-target: 44px;        /* phone minimum */
+
+  /* ---- radii ------------------------------------------------------------- */
+  --radius-sm: 4px;
+  --radius-md: 6px;   /* buttons, inputs, drawers' inner rows */
+  --radius-lg: 8px;   /* cards, drawers, popups */
+  --radius-pill: 999px;
+
+  /* ---- elevation --------------------------------------------------------- */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, .07);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, .10);
+  --shadow-lg: 0 2px 12px rgba(0, 0, 0, .18);
+  --focus-ring: 0 0 0 2px #ffffff, 0 0 0 4px #1b1a18;
+
+  /* ---- motion ------------------------------------------------------------ */
+  --ease: cubic-bezier(.2, .6, .2, 1);
+  --dur-fast: 120ms;
+  --dur: 180ms;
+}
+
+/* Palette A "Ember" — the alternative: done cools down, what is left burns.
+:root {
+  --map-cartpath-complete: #1f7a5c;
+  --map-cartpath-run: #4b8fbf;
+  --map-cartpath-not-run: #ff4d1f;
+  --map-road-run: #a8c4d8;
+  --map-road-not-run: #7e7c76;
+  --map-excluded: #56544f;
+  --map-uncounted: #d2d1cc;
+  --map-node-missed-road-fill: #ffd400;
+  --map-change-band: #e8c547;
+  --map-route-new: #6a2bd9;
+  --map-route-known: #b9a0e8;
+  --map-route-tint: #f3effe;
+  --map-route-tint-border: #cfc3f4;
+  --map-route-tint-text: #3a2a63;
+}
+*/
+
+/* Reduced motion: the running bar and drawer transitions stop. */
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur-fast: 0ms; --dur: 0ms; }
+}
