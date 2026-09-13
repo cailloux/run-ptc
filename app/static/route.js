@@ -32,6 +32,8 @@
   let busy = false;
   let picking = false;          // finish mode: clicks on lines pick segments
   const picks = new Map();      // segment_id -> not-run metres on it
+  // About a 20 mi loop, built in half a second; 500 picks made 80+ mi and took 5-14 s.
+  const MAX_PICKS = 150;
 
   // The line gets its own pane above the coverage lines and lets clicks
   // through; waypoint markers sit in Leaflet's marker pane above it.
@@ -332,7 +334,7 @@
   map.on('click', (e) => {
     if (!routeMode || busy) return;
     if (picking && state.stops.length) {
-      say('Click a red line to pick its segment.');
+      if (!swallowClick) say('Click a red line, or shift-drag a box, to pick segments.');
       return;
     }
     if (e.originalEvent && e.originalEvent.shiftKey) retraceTo(e.latlng);
@@ -347,7 +349,7 @@
 
   function pickMessage() {
     if (!state.stops.length) return 'Click your start, then the segments to finish.';
-    if (!picks.size) return 'Click red lines to pick segments to finish.';
+    if (!picks.size) return 'Click red lines, or shift-drag a box, to pick segments to finish.';
     const m = [...picks.values()].reduce((a, b) => a + b, 0);
     return `${plural(picks.size, 'segment')} · ${(m / METERS_PER_MILE).toFixed(2)} mi not run`;
   }
@@ -379,9 +381,32 @@
     help();
   }
 
+  // Adds these segments to the picks, with the not-run metres on each.
+  function addPicks(ids) {
+    const total = new Set([...picks.keys(), ...ids]).size;
+    if (total > MAX_PICKS) {
+      say(`That makes ${total} segments; pick at most ${MAX_PICKS} (a smaller area).`, true);
+      return;
+    }
+    for (const id of ids) picks.set(id, 0);
+    COVERAGE['cartpath-not-run'].eachLayer(addMetres);
+    COVERAGE['road-not-run'].eachLayer(addMetres);
+    function addMetres(l) {
+      const p = l.feature.properties;
+      if (ids.has(p.segment_id)) picks.set(p.segment_id, picks.get(p.segment_id) + p.length_m);
+    }
+    drawPicks();
+    render();
+    help();
+  }
+
+  // A box drag ends in a click where the mouse comes up; that click isn't a pick.
+  let swallowClick = false;
+
   function pick(e) {
     if (!routeMode || !picking || busy || !state.stops.length) return;   // the first click sets the start
     L.DomEvent.stop(e);
+    if (swallowClick) return;
     const p = e.propagatedFrom.feature.properties;
     if (!['run', 'not_run'].includes(p.state) || p.nodes_hit >= p.nodes_total) {
       say('That segment has nothing left to run.', true);
@@ -389,19 +414,52 @@
     }
     if (picks.has(p.segment_id)) {
       picks.delete(p.segment_id);
+      drawPicks();
+      render();
+      help();
     } else {
-      let m = 0;
-      Object.values(COVERAGE).forEach((group) => group.eachLayer((l) => {
-        const q = l.feature.properties;
-        if (q.segment_id === p.segment_id && q.state === 'not_run') m += q.length_m;
-      }));
-      picks.set(p.segment_id, m);
+      addPicks(new Set([p.segment_id]));
     }
-    drawPicks();
-    render();
-    help();
   }
   Object.values(COVERAGE).forEach((group) => group.on('click', pick));
+
+  // Shift-drag while picking: every segment with not-run ground inside the
+  // box is added. The whole segment is finished, even its parts outside.
+  let box = null;   // { start, rect }
+  map.on('mousedown', (e) => {
+    if (!routeMode || !picking || busy || !state.stops.length || !e.originalEvent.shiftKey) return;
+    // Leaflet never starts a map drag on a shift-mousedown, so the map stays put.
+    box = { start: e.latlng, rect: L.rectangle(L.latLngBounds(e.latlng, e.latlng), {
+      renderer, color: token('--map-finish-pick'), weight: 1.5, dashArray: '5 4', fillOpacity: 0.08,
+      interactive: false,
+    }).addTo(map) };
+  });
+  map.on('mousemove', (e) => {
+    if (box) box.rect.setBounds(L.latLngBounds(box.start, e.latlng));
+  });
+  document.addEventListener('mouseup', () => {
+    if (!box) return;
+    const bounds = box.rect.getBounds();
+    box.rect.remove();
+    box = null;
+    const size = map.latLngToContainerPoint(bounds.getNorthEast())
+      .distanceTo(map.latLngToContainerPoint(bounds.getSouthWest()));
+    if (size < 8) return;   // a shift-click, not a box
+    swallowClick = true;
+    setTimeout(() => { swallowClick = false; }, 0);
+    const px = L.bounds(map.latLngToLayerPoint(bounds.getNorthWest()), map.latLngToLayerPoint(bounds.getSouthEast()));
+    const ids = new Set();
+    for (const key of ['cartpath-not-run', 'road-not-run']) {
+      COVERAGE[key].eachLayer((l) => {
+        const p = l.feature.properties;
+        if (ids.has(p.segment_id) || !bounds.intersects(l.getBounds())) return;
+        const pts = l.getLatLngs().flat(Infinity).map((ll) => map.latLngToLayerPoint(ll));
+        if (pts.some((pt, i) => i && L.LineUtil.clipSegment(pts[i - 1], pt, px, false, true))) ids.add(p.segment_id);
+      });
+    }
+    if (ids.size) addPicks(ids);
+    else say('No red (not run) ground in that box.');
+  });
 
   function build() {
     const ids = [...picks.keys()];

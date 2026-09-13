@@ -38,7 +38,7 @@ class CoverageRequest(BaseModel):
 
 class FinishRequest(BaseModel):
     start: LatLon
-    segment_ids: list[int] = Field(min_length=1, max_length=500)
+    segment_ids: list[int] = Field(min_length=1, max_length=150)   # as route.js MAX_PICKS
 
 
 def _route_errors(fn):

@@ -168,7 +168,7 @@ The route is a start point plus an ordered list of legs, and each leg holds its 
 
 **New miles.** After every edit the whole route goes to `POST /route/coverage`, which samples it every 5 m. A sample is new when it lies on a not-run node interval (the red and amber on the map) of a counted, non-excluded segment, and no earlier sample of the route passed the same spot. Out-and-backs and retraces therefore count once. The route draws light blue, with the new stretches dark blue on top, and a chip next to the distance reads "3.10 mi new". Each stretch's ends are accurate to about half a sample.
 
-**Finish segments.** A tool in the route bar. Click a start, or keep the current route's start, then click lines to pick segments with not-run stretches. Picked segments get a blue band. Build replaces the route, in one undoable step, with a loop from the start that runs every not-run stretch of the picks (`POST /route/finish`, `app/finish.py`):
+**Finish segments.** A tool in the route bar. Click a start, or keep the current route's start, then click lines to pick segments with not-run stretches, or shift-drag a box to add every segment with not-run ground inside it (desktop only; the whole segment is finished, even its parts outside the box). Clicking a picked segment unpicks it. Picked segments get a blue band, node dots hide while picking so they don't take the clicks, and picks are capped at 150 segments (about a 20 mi loop, built in half a second; 500 made 80+ mi routes and took 5 to 14 s). Build replaces the route, in one undoable step, with a loop from the start that runs every not-run stretch of the picks (`POST /route/finish`, `app/finish.py`):
 
 - Required are the graph edges that overlap a not-run interval. Consecutive ones along a segment part chain into one unit, run either way.
 - Units are ordered greedily (from the current junction, the unit whose nearer end is cheapest to reach, costed by `pgr_dijkstraCostMatrix` so the path-over-road preference holds), then improved by 2-opt: reversing runs of the order, which also flips each unit's direction. Covering chosen edges is the rural postman problem, which has no fast exact solution; on real picks 2-opt matched the exact optimum (Held-Karp) in most trials and came within 2% in the rest, where greedy alone was up to 30% over. Deadheads between units come from `pgr_dijkstra`. The first and last legs route from and back to the exact start click.
@@ -207,7 +207,7 @@ GET  /changes                          segments from each layer's latest city ch
 POST /route/snap  {lat, lon} -> the point on the network
 POST /route/leg   {from, to} -> latlngs, length_m, snapped from/to
 POST /route/coverage {latlngs} -> new_m, new stretches (lines of latlngs)
-POST /route/finish {start, segment_ids} -> from, legs [{latlngs, length_m, to}], length_m, skipped
+POST /route/finish {start, segment_ids (1-150)} -> from, legs [{latlngs, length_m, to}], length_m, skipped
                                  422 too far from the network or unreachable, 503 no graph
 GET  /graph/islands                    edges not connected to the main network
 ```
