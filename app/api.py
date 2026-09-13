@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from app import db, exclusions, health
 from app.config import intervals_credentials, load_settings
 from app.coverage import coverage_geojson
+from app.finish import finish_route, new_miles
 from app.graph import main_component
 from app.intervals import IntervalsClient
 from app.jobs import JobBusy, last_runs, start_job
@@ -29,6 +30,15 @@ class LatLon(BaseModel):
 class LegRequest(BaseModel):
     start: LatLon = Field(alias="from")
     end: LatLon = Field(alias="to")
+
+
+class CoverageRequest(BaseModel):
+    latlngs: list[tuple[float, float]] = Field(max_length=50_000)
+
+
+class FinishRequest(BaseModel):
+    start: LatLon
+    segment_ids: list[int] = Field(min_length=1, max_length=150)   # as route.js MAX_PICKS
 
 
 def _route_errors(fn):
@@ -171,6 +181,30 @@ def route_leg(body: LegRequest) -> dict:
         "length_m": round(r.length_m, 1),
         "from": {"lat": r.start.lat, "lon": r.start.lon},
         "to": {"lat": r.end.lat, "lon": r.end.lon},
+    }
+
+
+@router.post("/route/coverage")
+def route_coverage(body: CoverageRequest) -> dict:
+    """How much of a route is new ground (not-run intervals), and where."""
+    with db.connect() as conn:
+        r = new_miles(conn, body.latlngs)
+    return {"new_m": round(r.new_m, 1), "new": r.lines}
+
+
+@router.post("/route/finish")
+def route_finish(body: FinishRequest) -> dict:
+    """A loop from the start that runs every not-run stretch of these segments."""
+    max_m = load_settings().route_snap_max_m
+    with db.connect() as conn:
+        f = _route_errors(lambda: finish_route(conn, (body.start.lat, body.start.lon),
+                                               body.segment_ids, max_m))
+    return {
+        "from": {"lat": f.start[0], "lon": f.start[1]},
+        "legs": [{"latlngs": lg["latlngs"], "length_m": round(lg["length_m"], 1),
+                  "to": {"lat": lg["to"][0], "lon": lg["to"][1]}} for lg in f.legs],
+        "length_m": round(f.length_m, 1),
+        "skipped": f.skipped,
     }
 
 

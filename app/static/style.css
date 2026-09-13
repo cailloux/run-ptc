@@ -40,6 +40,10 @@ button, input { font: inherit; }
 .btn-block { width: 100%; }
 .btn-dark { background: var(--color-surface-dark-raised); border-color: var(--color-border-dark); color: var(--color-text-invert); }
 .btn-dark:hover { background: #33312b; }
+/* A pressed tool in the route bar takes the planning blue. */
+.btn-dark[aria-pressed="true"], .btn-dark[aria-pressed="true"]:hover {
+  background: var(--map-route-new); border-color: var(--map-route-new); color: #fff;
+}
 .btn-light { background: var(--color-surface); border-color: var(--color-surface); color: var(--color-text); font-weight: var(--weight-semibold); }
 .btn-outline-light { background: transparent; border-color: #6b6860; color: var(--color-text-invert); }
 .btn-outline-light:hover { background: var(--color-surface-dark-raised); }
@@ -111,6 +115,10 @@ button, input { font: inherit; }
 .route-figures { display: flex; align-items: baseline; gap: 4px; white-space: nowrap; }
 #route-distance { font-size: var(--text-number-lg); font-weight: var(--weight-bold); letter-spacing: var(--tracking-tight); font-variant-numeric: tabular-nums; }
 .route-figures .unit { font-size: var(--text-small); color: #b3afa6; }
+#route-new { align-self: center; margin-left: var(--space-3); }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: var(--radius-pill);
+        background: #14315e; color: #cfe2ff; font-size: var(--text-small); font-variant-numeric: tabular-nums; }
+.chip .swatch.line { width: 14px; }
 #route-tools { display: flex; gap: var(--space-2); }
 #route-message { font-size: var(--text-small); color: #b3afa6; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #route-message.error { color: #ffb4ab; }

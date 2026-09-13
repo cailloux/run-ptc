@@ -85,6 +85,7 @@
   --map-route-new: #1b6ef3;      /* route over ground not yet run */
   --map-route-known: #9dc2fb;    /* route over ground already run */
   --map-route-casing: #ffffff;
+  --map-finish-pick: #1b6ef3;    /* segments picked to finish, a translucent band */
   --map-meter-cartpath: #34332f;   /* completion meters: ink, not a map colour */
   --map-meter-road: #8b8983;
   --map-route-tint: #eef4ff;     /* planning-mode surfaces */
@@ -108,6 +109,7 @@
   --map-w-route: 5;
   --map-w-route-casing: 11;
   --map-w-change-band: 12;
+  --map-w-finish-pick: 14;
 
   /* ---- space ------------------------------------------------------------- */
   --space-1: 4px;
