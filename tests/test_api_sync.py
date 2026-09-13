@@ -68,5 +68,8 @@ def test_sync_button_without_credentials(api):
 def test_network_returns_coverage_states(api, conn):
     client, _ = api
     city(conn)
-    states = {f["properties"]["state"] for f in client.get("/network?layer=cartpath").json()["features"]}
+    resp = client.get("/network?layer=cartpath")
+    states = {f["properties"]["state"] for f in resp.json()["features"]}
     assert states == {"not_run"}
+    # The client asks for gzip, as browsers do; the map's GeoJSON compresses ~6x.
+    assert resp.headers["content-encoding"] == "gzip"
