@@ -1,16 +1,5 @@
 const map = L.map('map', { preferCanvas: true }).setView([33.39, -84.57], 13);
-
-// OpenStreetMap's standard tiles, used within the OSMF tile policy
-// (https://operations.osmfoundation.org/policies/tiles/): visible
-// attribution, the browser's normal Referer, no bulk or prefetching. They're
-// shown in grayscale (style.css) so OSM's own colours don't compete with
-// the coverage lines, which are judged against this gray.
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-  className: 'basemap',
-  maxNativeZoom: 19,
-  maxZoom: 20,
-}).addTo(map);
+basemap(map);
 
 const NODE_MIN_ZOOM = 15;
 const SYNC_POLL_MS = 3000;
@@ -64,7 +53,21 @@ function intervalsLink(intervalsId) {
 
 // ---- coverage -------------------------------------------------------------------
 
-const STATE_STYLE = coverageStyles();
+// One style per network state (docs/design/map-styles.md). Finished ground
+// is gray; colour means unfinished.
+const STATE_STYLE = {
+  cartpath: {
+    complete: lineStyle('cartpath-complete'),
+    run: lineStyle('cartpath-run'),
+    not_run: lineStyle('cartpath-not-run'),
+  },
+  road: {
+    run: lineStyle('road-run'),
+    not_run: lineStyle('road-not-run'),
+  },
+  excluded: lineStyle('excluded', { dashArray: '4 6' }),
+  uncounted: lineStyle('uncounted'),
+};
 const STATE_LABEL = {
   complete: 'Complete', run: 'Run', not_run: 'Not run', excluded: 'Excluded', uncounted: 'Not counted',
 };
@@ -157,10 +160,7 @@ const NODE_STYLE = {
     fillColor: token('--map-node-missed-road-fill'), fillOpacity: 1 },
 };
 const NODE_SWATCH = { hit: 'dot hit', missed: 'dot missed', missedRoad: 'dot missed-road' };
-
-function nodeHead(kind) {
-  return { hit: 'Hit node', missed: 'Missed node', missedRoad: 'Missed road node' }[kind];
-}
+const NODE_TITLE = { hit: 'Hit node', missed: 'Missed node', missedRoad: 'Missed road node' };
 
 async function nodePopup(id, kind) {
   const d = await getJson(`nodes/${id}`);
@@ -187,7 +187,7 @@ function nodeLayer(urls, missedKind = 'missed') {
     onEachFeature: (f, l) => {
       const kind = f.properties.hit ? 'hit' : missedKind;
       clickPopup(l, () => nodePopup(f.properties.id, kind),
-        () => popupHtml({ swatch: { cls: NODE_SWATCH[kind] }, title: nodeHead(kind), body: SKELETON }));
+        () => popupHtml({ swatch: { cls: NODE_SWATCH[kind] }, title: NODE_TITLE[kind], body: SKELETON }));
     },
   });
   const wrapper = L.layerGroup();
@@ -413,7 +413,7 @@ function renderSync(s) {
 
 async function refreshAll() {
   await Promise.all([
-    loadBanner(),
+    loadStatus(),
     loadStats(),
     loadNetwork('cartpath'),
     loadNetwork('road'),
@@ -427,8 +427,7 @@ function pollSync() {
   if (syncPoll) return;
   syncPoll = setInterval(async () => {
     try {
-      const s = await getJson('sync');
-      renderSync(s);
+      const s = (await loadStatus()).sources.sync;
       if (!s.running) {
         clearInterval(syncPoll);
         syncPoll = null;
@@ -458,10 +457,12 @@ syncButtons.forEach((b) => b.addEventListener('click', startSync));
 
 // ---- freshness banner ---------------------------------------------------------------
 
-// Shown in the page flow (never over the map) when a data source is failing
-// or stale, or the nightly script is overdue; details are on the status page.
-async function loadBanner() {
+// GET /status feeds the sync status and the banner. The banner shows in the
+// page flow (never over the map) when a data source is failing or stale, or
+// the nightly script is overdue; details are on the status page.
+async function loadStatus() {
   const s = await getJson('status');
+  renderSync(s.sources.sync);
   const rows = Object.values(s.sources).filter((src) => src.state !== 'ok').map((src) => {
     if (src.state === 'failing') {
       return { level: 'failing', title: `${src.label} failing`, detail: briefError(src.latest?.error),
@@ -484,6 +485,7 @@ async function loadBanner() {
     + `${r.when ? ` <span class="when">· ${escapeHtml(formatEastern(r.when))}</span>` : ''}</div></div>`
     + '<a href="status.html">Status page →</a></div>').join('');
   if (wasHidden !== banner.hidden) map.invalidateSize();
+  return s;
 }
 
 // ---- find ---------------------------------------------------------------------------
@@ -519,11 +521,9 @@ function showLoadError(err) {
 (async () => {
   // The small requests go first so the bar fills in while the networks load.
   const changesLoaded = getJson('changes');
-  getJson('sync').then((s) => {
-    renderSync(s);
-    if (s.running) pollSync();   // e.g. a CLI sync already in progress
+  loadStatus().then((s) => {
+    if (s.sources.sync.running) pollSync();   // e.g. a CLI sync already in progress
   }).catch(showLoadError);
-  loadBanner().catch((err) => console.error(err));
 
   await Promise.all([loadNetwork('road'), loadNetwork('cartpath'), loadStats()]);
   document.querySelectorAll('#legend input[data-layer]').forEach((input) => {

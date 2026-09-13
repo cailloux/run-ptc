@@ -181,19 +181,15 @@
     changed();
   }
 
-  function undo() {
-    if (!undoStack.length || busy) return;
-    redoStack.push(state);
-    state = undoStack.pop();
+  // Undo moves a snapshot from the undo stack to the redo stack; redo the reverse.
+  function step(from, to) {
+    if (!from.length || busy) return;
+    to.push(state);
+    state = from.pop();
     changed();
   }
-
-  function redo() {
-    if (!redoStack.length || busy) return;
-    undoStack.push(state);
-    state = redoStack.pop();
-    changed();
-  }
+  const undo = () => step(undoStack, redoStack);
+  const redo = () => step(redoStack, undoStack);
 
   // ---- router calls -------------------------------------------------------
 
@@ -478,14 +474,12 @@
   // ---- GPX ---------------------------------------------------------------
 
   function gpx(name, pts) {
-    const esc = (s) => s.replace(/[<>&"']/g, (c) => (
-      { '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' }[c]));
     return [
       '<?xml version="1.0" encoding="UTF-8"?>',
       '<gpx version="1.1" creator="Run PTC" xmlns="http://www.topografix.com/GPX/1/1">',
-      `  <metadata><name>${esc(name)}</name><time>${new Date().toISOString()}</time></metadata>`,
+      `  <metadata><name>${escapeHtml(name)}</name><time>${new Date().toISOString()}</time></metadata>`,
       '  <trk>',
-      `    <name>${esc(name)}</name>`,
+      `    <name>${escapeHtml(name)}</name>`,
       '    <trkseg>',
       ...pts.map(([lat, lon]) => `      <trkpt lat="${lat.toFixed(7)}" lon="${lon.toFixed(7)}"></trkpt>`),
       '    </trkseg>',
