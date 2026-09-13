@@ -19,7 +19,7 @@ Single-user planning tool for running every cart path and road in Peachtree City
 - Python 3.14, FastAPI, psycopg 3. Raw SQL for spatial queries; no ORM. The Dockerfile's base image is the single source of the Python version; CI runs the tests inside that image.
 - Postgres with PostGIS and pgRouting via the `pgrouting/pgrouting` image. The stock `postgres` and `postgis/postgis` images lack pgRouting.
 - Plain SQL migrations in `db/migrations/`, numbered and applied in order.
-- Frontend: Leaflet with plain JS and no build step, served by FastAPI from `app/static/`. Load libraries from cdnjs.
+- Frontend: Leaflet with plain JS and no build step, served by FastAPI from `app/static/`. Load libraries from cdnjs. Design tokens (type, color, spacing, and the map's line colors and weights) live in `app/static/tokens.css`; the map reads the `--map-*` properties at startup, so don't copy colors into JS. The design reference is `docs/design/`.
 - pytest for tests.
 
 ## Geometry rules
@@ -36,6 +36,7 @@ Single-user planning tool for running every cart path and road in Peachtree City
 ## External services
 
 **City ArcGIS layers:** public, no auth. The URLs and paging rules are in `docs/PLAN.md` under "Data sources." The server caps each response at 1,000 records, so always page with `resultOffset`.
+- The nightly refresh and real data updates are fine. While testing or debugging, ask before running anything that calls the city server: `refresh` (with or without `--force`), `import`, the status page's "Check city now", or a probe with curl. A forced refresh is about 7 requests. Test import and refresh logic against the tests' fake city instead.
 
 **Intervals.icu:**
 - Auth is HTTP Basic with the literal username `API_KEY` and the API key as the password.

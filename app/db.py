@@ -13,8 +13,13 @@ MIGRATION_LOCK = 7_316_240
 
 
 def connect(url: str | None = None) -> psycopg.Connection:
-    """Autocommit connection. Group multi-statement work with conn.transaction()."""
-    return psycopg.connect(url or database_url(), autocommit=True)
+    """Autocommit connection. Group multi-statement work with conn.transaction().
+
+    JIT is off: the planner's cost estimates for the spatial queries run far
+    too high, so Postgres spent ~1.8 s compiling the coverage query (/network)
+    that then ran in 0.1-0.3 s. The jobs run no slower without it.
+    """
+    return psycopg.connect(url or database_url(), autocommit=True, options="-c jit=off")
 
 
 def connect_with_retry(timeout_s: float = 60) -> psycopg.Connection:

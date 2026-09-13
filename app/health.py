@@ -38,7 +38,7 @@ class Health:
     state: str                    # ok | failing | stale
     last_ok: dict | None          # job, finished_at, headline
     latest: dict | None           # the latest finished attempt
-    running: bool
+    running: dict | None          # the job running now: id, job, trigger, started_at
     advice: str | None
     stale_hours: float
 
@@ -54,7 +54,7 @@ class Health:
 
     def as_dict(self) -> dict:
         return {"state": self.state, "label": self.label, "problem": self.problem(),
-                "advice": self.advice, "running": self.running,
+                "advice": self.advice, "running": self.running is not None, "running_job": self.running,
                 "last_ok": self.last_ok, "latest": self.latest}
 
 
@@ -124,14 +124,22 @@ def source_health(conn: psycopg.Connection, settings: Settings, source: str,
         last_ok={"job": last_ok[0], "finished_at": last_ok[1], "headline": first_line(last_ok[2])}
                 if last_ok else None,
         latest=dict(zip(cols, latest)) if latest else None,
-        # A 'running' row counts only while the lock is held; a crash can
-        # leave one behind until the app restarts and marks it interrupted.
-        running=job_running(conn) and conn.execute(
-            "SELECT EXISTS (SELECT 1 FROM job_run WHERE job = ANY(%s) AND status = 'running')",
-            (list(jobs),)).fetchone()[0],
+        running=_running_job(conn, jobs),
         advice=_advice(source, state, latest[6] if latest else None),
         stale_hours=settings.stale_after_hours,
     )
+
+
+def _running_job(conn: psycopg.Connection, jobs: tuple[str, ...]) -> dict | None:
+    # A 'running' row counts only while the lock is held; a crash can leave
+    # one behind until the app restarts and marks it interrupted.
+    if not job_running(conn):
+        return None
+    row = conn.execute("""
+        SELECT id, job, trigger, started_at FROM job_run
+        WHERE job = ANY(%s) AND status = 'running' ORDER BY started_at DESC LIMIT 1
+    """, (list(jobs),)).fetchone()
+    return dict(zip(("id", "job", "trigger", "started_at"), row)) if row else None
 
 
 def all_health(conn: psycopg.Connection, settings: Settings, now: datetime) -> dict[str, Health]:

@@ -2,6 +2,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app import db, exclusions
@@ -28,6 +29,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Run PTC", lifespan=lifespan)
+# /network is ~1.4-1.8 MB of GeoJSON per layer and compresses about 6x. Level 5
+# takes ~25 ms; the default 9 takes 3-4x as long for ~3% less.
+app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=5)
 # Tests swap these for fakes so POST /sync and /refresh never touch the network.
 app.state.intervals_client_factory = default_intervals_client
 app.state.city_client_factory = default_city_client

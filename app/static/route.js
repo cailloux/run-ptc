@@ -3,15 +3,13 @@
 // legs call the server; retraces copy the route's own geometry, so they
 // can't drift or add spurs.
 (() => {
-  // Magenta passes the dataviz colorblind check against every coverage
-  // color; the white casing and width set it apart as well.
-  const ROUTE_COLOR = '#e87ba4';
   const RETRACE_PICK_PX = 20;   // how close a shift-click must be to the route
   const WAYPOINT_PICK_PX = 8;   // a shift-click this close to a waypoint targets it
 
   const $ = (id) => document.getElementById(id);
-  const toggle = $('route-toggle');
-  const tools = $('route-tools');
+  const toggle = $('route-toggle');   // in the top bar
+  const done = $('route-done');       // in the route bar
+  const hint = $('route-hint');
   const distanceEl = $('route-distance');
   const messageEl = $('route-message');
   const buttons = {
@@ -38,8 +36,12 @@
   pane.style.zIndex = 450;
   pane.style.pointerEvents = 'none';
   const renderer = L.canvas({ pane: 'route' });
-  const casing = L.polyline([], { renderer, color: '#fff', weight: 9, opacity: 0.95 });
-  const line = L.polyline([], { renderer, color: ROUTE_COLOR, weight: 5, opacity: 1 });
+  // Blue is the only cool colour on the map, so the route can't be read as
+  // coverage; the white casing sets it apart from the lines beneath.
+  const casing = L.polyline([], { renderer, color: token('--map-route-casing'),
+    weight: parseFloat(token('--map-w-route-casing')), opacity: 0.95 });
+  const line = L.polyline([], { renderer, color: token('--map-route-new'),
+    weight: parseFloat(token('--map-w-route')), opacity: 1 });
   const layer = L.layerGroup([casing, line]).addTo(map);
   const markers = L.layerGroup().addTo(map);
 
@@ -76,9 +78,14 @@
     stops[i] = { ...st, latlng: stops[st.target].latlng, latlngs: pts.reverse(), length_m: meters };
   }
 
+  // The route bar's message line doubles as help and errors.
+  const HELP = 'Drag a waypoint to reroute · shift-click the route to retrace';
   function say(text, isError = false) {
-    messageEl.textContent = text;
+    messageEl.textContent = isError ? `✕ ${text}` : text;
     messageEl.classList.toggle('error', isError);
+  }
+  function help() {
+    say(state.stops.length ? HELP : 'Click a path or road to start.');
   }
 
   // ---- drawing ------------------------------------------------------------
@@ -105,37 +112,40 @@
       markers.addLayer(m);
     });
 
-    distanceEl.textContent = state.stops.length ? `${(totalMeters() / METERS_PER_MILE).toFixed(2)} mi` : '';
-    buttons.undo.disabled = !undoStack.length;
-    buttons.redo.disabled = !redoStack.length;
-    buttons.retrace.disabled = pts.length < 2;
-    buttons.exportGpx.disabled = pts.length < 2;
-    buttons.clear.disabled = !state.stops.length;
-    tools.hidden = !(routeMode || state.stops.length);
+    const miles = (totalMeters() / METERS_PER_MILE).toFixed(2);
+    distanceEl.textContent = miles;
+    buttons.undo.disabled = busy || !undoStack.length;
+    buttons.redo.disabled = busy || !redoStack.length;
+    buttons.retrace.disabled = busy || pts.length < 2;
+    buttons.exportGpx.disabled = busy || pts.length < 2;
+    buttons.clear.disabled = busy || !state.stops.length;
+    // Outside planning the route stays drawn; the top bar button says so.
+    toggle.textContent = state.stops.length ? `Route · ${miles} mi` : 'Plan a route';
+    hint.hidden = !routeMode || state.stops.length > 0;
   }
 
   function commit(next) {
     undoStack.push(state);
     redoStack = [];
     state = next;
-    say('');
     render();
+    help();
   }
 
   function undo() {
     if (!undoStack.length || busy) return;
     redoStack.push(state);
     state = undoStack.pop();
-    say('');
     render();
+    help();
   }
 
   function redo() {
     if (!redoStack.length || busy) return;
     undoStack.push(state);
     state = redoStack.pop();
-    say('');
     render();
+    help();
   }
 
   // ---- router calls -------------------------------------------------------
@@ -159,15 +169,18 @@
     if (busy) return;
     busy = true;
     say('Routing…');
+    render();   // disables the tools while the leg is routed
     try {
       await fn();
     } catch (err) {
-      say(err.message, true);
-      render();   // puts a dragged marker back where it was
-    } finally {
       busy = false;
-      if (messageEl.textContent === 'Routing…') say('');
+      render();   // puts a dragged marker back where it was
+      say(err.message, true);
+      return;
     }
+    busy = false;
+    render();
+    if (messageEl.textContent === 'Routing…') help();
   }
 
   // ---- editing --------------------------------------------------------------
@@ -316,26 +329,31 @@
 
   // ---- controls ------------------------------------------------------------
 
+  // Planning is a mode: the dark route bar replaces the top bar (same
+  // height, so the map doesn't move), drawers close, and the map gets an edge.
   function setMode(on) {
     routeMode = on;
-    toggle.textContent = on ? 'Done planning' : 'Plan a route';
-    toggle.classList.toggle('active', on);
+    $('topbar').hidden = on;
+    $('route').hidden = !on;
+    document.body.classList.toggle('planning', on);
     map.getContainer().classList.toggle('routing', on);
     // Shift-drag box zoom and double-click zoom would fight route clicks.
     if (on) {
+      openDrawer(null);
       map.closePopup();
       map.boxZoom.disable();
       map.doubleClickZoom.disable();
-      say(state.stops.length ? '' : 'Click a path or road to start.');
+      help();
     } else {
       map.boxZoom.enable();
       map.doubleClickZoom.enable();
-      say('');
     }
     render();   // waypoints are draggable only while planning
+    map.invalidateSize();   // the phone layout docks the route bar at the bottom
   }
 
-  toggle.addEventListener('click', () => setMode(!routeMode));
+  toggle.addEventListener('click', () => setMode(true));
+  done.addEventListener('click', () => setMode(false));
   buttons.undo.addEventListener('click', undo);
   buttons.redo.addEventListener('click', redo);
   buttons.retrace.addEventListener('click', () => { if (!busy) addRetrace(state.stops, 0); });
@@ -343,6 +361,10 @@
   buttons.exportGpx.addEventListener('click', exportGpx);
 
   document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && routeMode && !e.target.closest('input, textarea')) {
+      setMode(false);
+      return;
+    }
     if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'z') return;
     if (e.target.closest('input, textarea')) return;
     if (!undoStack.length && !redoStack.length) return;

@@ -17,3 +17,8 @@ def test_repo_settings_load():
     assert s.cartpath_counted_types == ("Path", "Bridge", "Tunnel")
     assert s.sync_run_types == ("Run", "TrailRun")
     assert s.sync_backfill_start == date(2023, 1, 1)
+
+
+def test_connections_run_without_jit(conn):
+    # JIT spent ~1.8 s compiling the coverage query, which runs in 0.1-0.3 s.
+    assert conn.execute("SHOW jit").fetchone()[0] == "off"

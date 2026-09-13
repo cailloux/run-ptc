@@ -4,17 +4,23 @@
   <meta charset="utf-8">
   <title>Run PTC · Status</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="tokens.css">
   <link rel="stylesheet" href="style.css">
 </head>
 <body class="status-page">
   <header>
-    <h1>Run PTC · Data status</h1>
-    <a href="./">Map</a>
+    <a class="wordmark" href="./">Run PTC</a>
+    <h1>Data status</h1>
+    <span class="spacer"></span>
     <span id="updated" class="note"></span>
+    <a href="./">← Map</a>
   </header>
   <main>
-    <section class="card" id="sync-card"></section>
-    <section class="card" id="city-card"></section>
+    <div class="source-grid">
+      <section class="card" id="sync-card"></section>
+      <section class="card" id="city-card"></section>
+    </div>
+    <section class="card" id="layers-card"></section>
     <section class="card" id="alerts-card"></section>
     <section class="card">
       <h2>Recent jobs</h2>

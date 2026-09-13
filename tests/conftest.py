@@ -17,11 +17,8 @@ def db_url():
 
 @pytest.fixture
 def conn(db_url):
+    # db.connect() turns JIT off, which also keeps the suite fast.
     with db.connect(db_url) as c:
-        # On tiny, never-analyzed fixture tables the planner's cost estimates
-        # trip the JIT threshold and every query pays to compile (16 s suite vs
-        # 4 s). On real data JIT makes no measurable difference either way.
-        c.execute("SET jit = off")
         c.execute("TRUNCATE segment, node, source_duplicate, activity, activity_piece, job_run,"
                   " route_edge, route_vertex, source_signature, alert_episode RESTART IDENTITY CASCADE")
         yield c

@@ -265,7 +265,8 @@ def changes() -> Response:
                     'seg_type', s.seg_type, 'change', s.city_change, 'changed_at', s.changed_at)
             ) ORDER BY s.layer, s.source_oid), '[]'::json))::text
         FROM segment s
-        WHERE s.changed_at = (SELECT max(changed_at) FROM segment WHERE layer = s.layer)
+        JOIN (SELECT layer, max(changed_at) AS at FROM segment GROUP BY layer) latest
+          ON latest.layer = s.layer AND s.changed_at = latest.at
     """, ())
 
 
@@ -313,7 +314,8 @@ def status() -> dict:
         change = conn.execute("""
             WITH latest AS (
                 SELECT s.city_change, s.changed_at FROM segment s
-                WHERE s.changed_at = (SELECT max(changed_at) FROM segment WHERE layer = s.layer)
+                JOIN (SELECT layer, max(changed_at) AS at FROM segment GROUP BY layer) m
+                  ON m.layer = s.layer AND s.changed_at = m.at
             ), at AS (SELECT max(changed_at) AS at FROM latest)
             SELECT at.at,
                    (SELECT count(*) FROM latest WHERE city_change = 'added'),
