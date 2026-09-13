@@ -14,8 +14,9 @@
   const messageEl = $('route-message');
   const buttons = {
     undo: $('route-undo'), redo: $('route-redo'), retrace: $('route-retrace'),
-    clear: $('route-clear'), exportGpx: $('route-export'),
+    finish: $('route-finish'), build: $('route-build'), clear: $('route-clear'), exportGpx: $('route-export'),
   };
+  const newChip = $('route-new');
 
   // The route is a list of stops. The first is the start; each later stop
   // holds the leg that arrives at it:
@@ -29,6 +30,8 @@
   let undoStack = [];
   let redoStack = [];
   let busy = false;
+  let picking = false;          // finish mode: clicks on lines pick segments
+  const picks = new Map();      // segment_id -> not-run metres on it
 
   // The line gets its own pane above the coverage lines and lets clicks
   // through; waypoint markers sit in Leaflet's marker pane above it.
@@ -37,13 +40,24 @@
   pane.style.pointerEvents = 'none';
   const renderer = L.canvas({ pane: 'route' });
   // Blue is the only cool colour on the map, so the route can't be read as
-  // coverage; the white casing sets it apart from the lines beneath.
+  // coverage; the white casing sets it apart from the lines beneath. The
+  // whole route draws light, and the stretches over ground not yet run
+  // (from POST /route/coverage) draw dark on top.
+  const weight = parseFloat(token('--map-w-route'));
   const casing = L.polyline([], { renderer, color: token('--map-route-casing'),
     weight: parseFloat(token('--map-w-route-casing')), opacity: 0.95 });
-  const line = L.polyline([], { renderer, color: token('--map-route-new'),
-    weight: parseFloat(token('--map-w-route')), opacity: 1 });
-  const layer = L.layerGroup([casing, line]).addTo(map);
+  const known = L.polyline([], { renderer, color: token('--map-route-known'), weight, opacity: 1 });
+  const fresh = L.polyline([], { renderer, color: token('--map-route-new'), weight, opacity: 1 });
+  const layer = L.layerGroup([casing, known, fresh]).addTo(map);
   const markers = L.layerGroup().addTo(map);
+
+  // Picked segments: a translucent band under the coverage lines.
+  map.createPane('picks').style.zIndex = 395;   // above the changes band, below overlayPane (400)
+  const pickBand = L.geoJSON(null, {
+    pane: 'picks',
+    renderer: L.canvas({ pane: 'picks' }),
+    style: lineStyle('finish-pick', { opacity: 0.35, interactive: false }),
+  }).addTo(map);
 
   const same = (p, q) => Math.abs(p[0] - q[0]) < 1e-6 && Math.abs(p[1] - q[1]) < 1e-6;
   const pathMeters = (pts) => pts.slice(1).reduce((m, p, i) => m + map.distance(pts[i], p), 0);
@@ -85,7 +99,8 @@
     messageEl.classList.toggle('error', isError);
   }
   function help() {
-    say(state.stops.length ? HELP : 'Click a path or road to start.');
+    if (picking) say(pickMessage());
+    else say(state.stops.length ? HELP : 'Click a path or road to start.');
   }
 
   // ---- drawing ------------------------------------------------------------
@@ -97,7 +112,7 @@
   function render() {
     const pts = points();
     casing.setLatLngs(pts);
-    line.setLatLngs(pts);
+    known.setLatLngs(pts);
 
     markers.clearLayers();
     const lastWaypoint = state.stops.map((s) => s.kind).lastIndexOf('route');
@@ -119,33 +134,63 @@
     buttons.retrace.disabled = busy || pts.length < 2;
     buttons.exportGpx.disabled = busy || pts.length < 2;
     buttons.clear.disabled = busy || !state.stops.length;
+    buttons.finish.disabled = busy;
+    buttons.finish.setAttribute('aria-pressed', String(picking));
+    buttons.build.hidden = !picking;
+    buttons.build.disabled = busy || !picks.size || !state.stops.length;
     // Outside planning the route stays drawn; the top bar button says so.
     toggle.textContent = state.stops.length ? `Route · ${miles} mi` : 'Plan a route';
     hint.hidden = !routeMode || state.stops.length > 0;
+  }
+
+  // New miles: asked for after every change to the route. A reply to an
+  // older route is dropped; the chip hides when the route is empty or the
+  // request fails.
+  let coverageSeq = 0;
+  async function refreshNew() {
+    const seq = ++coverageSeq;
+    const pts = points();
+    fresh.setLatLngs([]);
+    if (pts.length < 2) {
+      newChip.hidden = true;
+      return;
+    }
+    try {
+      const r = await postJson('route/coverage', { latlngs: pts });
+      if (seq !== coverageSeq) return;
+      fresh.setLatLngs(r.new);
+      $('route-new-mi').textContent = `${(r.new_m / METERS_PER_MILE).toFixed(2)} mi new`;
+      newChip.hidden = false;
+    } catch (err) {
+      if (seq === coverageSeq) newChip.hidden = true;
+    }
+  }
+
+  function changed() {
+    render();
+    help();
+    refreshNew();
   }
 
   function commit(next) {
     undoStack.push(state);
     redoStack = [];
     state = next;
-    render();
-    help();
+    changed();
   }
 
   function undo() {
     if (!undoStack.length || busy) return;
     redoStack.push(state);
     state = undoStack.pop();
-    render();
-    help();
+    changed();
   }
 
   function redo() {
     if (!redoStack.length || busy) return;
     undoStack.push(state);
     state = redoStack.pop();
-    render();
-    help();
+    changed();
   }
 
   // ---- router calls -------------------------------------------------------
@@ -286,9 +331,80 @@
 
   map.on('click', (e) => {
     if (!routeMode || busy) return;
+    if (picking && state.stops.length) {
+      say('Click a red line to pick its segment.');
+      return;
+    }
     if (e.originalEvent && e.originalEvent.shiftKey) retraceTo(e.latlng);
     else addStop(e.latlng);
   });
+
+  // ---- finish segments ---------------------------------------------------------
+  // Pick segments with not-run stretches, then Build: the server returns a
+  // loop from the route's start that runs them all, which replaces the route.
+
+  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+  function pickMessage() {
+    if (!state.stops.length) return 'Click your start, then the segments to finish.';
+    if (!picks.size) return 'Click red lines to pick segments to finish.';
+    const m = [...picks.values()].reduce((a, b) => a + b, 0);
+    return `${plural(picks.size, 'segment')} · ${(m / METERS_PER_MILE).toFixed(2)} mi not run`;
+  }
+
+  // Every piece of the picked segments, from the coverage layers (map.js).
+  function drawPicks() {
+    pickBand.clearLayers();
+    Object.values(COVERAGE).forEach((group) => group.eachLayer((l) => {
+      if (picks.has(l.feature.properties.segment_id)) pickBand.addData(l.feature);
+    }));
+  }
+
+  function setPicking(on) {
+    picking = on;
+    picks.clear();
+    drawPicks();
+    render();
+    help();
+  }
+
+  function pick(e) {
+    if (!routeMode || !picking || busy || !state.stops.length) return;   // the first click sets the start
+    L.DomEvent.stop(e);
+    const p = e.propagatedFrom.feature.properties;
+    if (!['run', 'not_run'].includes(p.state) || p.nodes_hit >= p.nodes_total) {
+      say('That segment has nothing left to run.', true);
+      return;
+    }
+    if (picks.has(p.segment_id)) {
+      picks.delete(p.segment_id);
+    } else {
+      let m = 0;
+      Object.values(COVERAGE).forEach((group) => group.eachLayer((l) => {
+        const q = l.feature.properties;
+        if (q.segment_id === p.segment_id && q.state === 'not_run') m += q.length_m;
+      }));
+      picks.set(p.segment_id, m);
+    }
+    drawPicks();
+    render();
+    help();
+  }
+  Object.values(COVERAGE).forEach((group) => group.on('click', pick));
+
+  function build() {
+    const ids = [...picks.keys()];
+    return withBusy(async () => {
+      const r = await postJson('route/finish', { start: ll(state.stops[0].latlng), segment_ids: ids });
+      commit({
+        stops: [{ kind: 'start', latlng: [r.from.lat, r.from.lon] }, ...r.legs.map((lg) => (
+          { kind: 'route', latlng: [lg.to.lat, lg.to.lon], latlngs: lg.latlngs, length_m: lg.length_m }))],
+      });
+      setPicking(false);
+      say(`Finishes ${plural(ids.length, 'segment')}`
+        + (r.skipped ? ` (${plural(r.skipped, 'stretch')} on islands skipped)` : ''));
+    });
+  }
 
   // ---- GPX ---------------------------------------------------------------
 
@@ -347,6 +463,7 @@
     } else {
       map.boxZoom.enable();
       map.doubleClickZoom.enable();
+      if (picking) setPicking(false);
     }
     render();   // waypoints are draggable only while planning
     map.invalidateSize();   // the phone layout docks the route bar at the bottom
@@ -358,11 +475,14 @@
   buttons.redo.addEventListener('click', redo);
   buttons.retrace.addEventListener('click', () => { if (!busy) addRetrace(state.stops, 0); });
   buttons.clear.addEventListener('click', () => { if (state.stops.length && !busy) commit(EMPTY); });
+  buttons.finish.addEventListener('click', () => { if (!busy) setPicking(!picking); });
+  buttons.build.addEventListener('click', () => { if (picks.size && !busy) build(); });
   buttons.exportGpx.addEventListener('click', exportGpx);
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && routeMode && !e.target.closest('input, textarea')) {
-      setMode(false);
+      if (picking) setPicking(false);   // Esc leaves finish mode first
+      else setMode(false);
       return;
     }
     if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'z') return;

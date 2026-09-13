@@ -39,12 +39,18 @@
   <!-- Planning mode: replaces the top bar at the same height. -->
   <header id="route" class="bar bar-dark" hidden>
     <span class="mode-flag"><i></i>Planning</span>
-    <div class="route-figures"><b id="route-distance">0.00</b><span class="unit">mi</span></div>
+    <div class="route-figures"><b id="route-distance">0.00</b><span class="unit">mi</span>
+      <span id="route-new" class="chip" hidden title="Ground you haven't run yet, counted once">
+        <span class="swatch line" style="--c:var(--map-route-known);--w:4"></span><span id="route-new-mi"></span></span></div>
     <div class="rule"></div>
     <div id="route-tools">
       <button id="route-undo" class="btn btn-dark" title="Undo (Ctrl/Cmd+Z)">Undo</button>
       <button id="route-redo" class="btn btn-dark" title="Redo (Ctrl/Cmd+Shift+Z)">Redo</button>
       <button id="route-retrace" class="btn btn-dark" title="Back along the route to the start">Retrace to start</button>
+      <button id="route-finish" class="btn btn-dark" aria-pressed="false"
+              title="Pick unfinished segments and build a loop from the start that runs them">Finish segments</button>
+      <button id="route-build" class="btn btn-light" hidden
+              title="Replace the route with a loop from its start that runs the picked segments">Build route</button>
       <button id="route-clear" class="btn btn-dark">Clear</button>
       <button id="route-export" class="btn btn-light">Export GPX</button>
     </div>
