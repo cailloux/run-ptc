@@ -274,7 +274,7 @@ Designed or discussed but not built:
 
 - **New miles on a route:** draw the route in two blues (new ground and ground already run) with a "3.10 mi new" figure. Needs `/route/leg` to return per-stretch coverage.
 - **Elevation profile** under the map while planning, with gain and loss. Needs an elevation source (e.g. a USGS DEM loaded into PostGIS).
-- **FIT course export** next to GPX.
+- **FIT course export** next to GPX, with turn cues only at real junctions, so the watch stops prompting turns on winding paths. Specced in [docs/specs/fit-course-export.md](specs/fit-course-export.md); starts with a test course on the Forerunner 955.
 - **Divided roads as one centerline** on the map, for coverage and nodes; today both carriageways show the kept side's coverage and nodes sit on the kept side.
 
 ## Tunable defaults
