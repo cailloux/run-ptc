@@ -8,7 +8,7 @@ change report written: what changed, and what that did to the totals.
 
 from dataclasses import dataclass, field
 
-import httpx
+import httpx2
 import psycopg
 
 from app import exclusions as excl
@@ -135,7 +135,7 @@ class RefreshReport:
         return lines
 
 
-def download(client: httpx.Client, layer: Layer, sig: LayerSignature, fetch=fetch_features) -> list[dict]:
+def download(client: httpx2.Client, layer: Layer, sig: LayerSignature, fetch=fetch_features) -> list[dict]:
     """Fetch a layer, refusing a download that doesn't match the signature's
     count. A page lost to a server glitch would otherwise delete real segments
     (and their hits). A city edit between the two requests also fails it; the
@@ -147,7 +147,7 @@ def download(client: httpx.Client, layer: Layer, sig: LayerSignature, fetch=fetc
     return features
 
 
-def refresh(conn: psycopg.Connection, client: httpx.Client, settings: Settings,
+def refresh(conn: psycopg.Connection, client: httpx2.Client, settings: Settings,
             exclusions: excl.Exclusions, *, force: bool = False,
             signature=layer_signature, fetch=fetch_features) -> RefreshReport:
     """Import each layer whose signature changed (or every layer if forced)."""

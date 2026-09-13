@@ -20,7 +20,7 @@ async function getJson(url, options) {
   return resp.json();
 }
 
-// An error's first line, without the request URL httpx appends (app/health.py brief()).
+// An error's first line, without the request URL httpx2 appends (app/health.py brief()).
 function briefError(error) {
   return (error ?? '').split('\n')[0].replace(/ for url '[^']*'/, '');
 }

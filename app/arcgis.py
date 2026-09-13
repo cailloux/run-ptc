@@ -2,7 +2,7 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-import httpx
+import httpx2
 
 # The city server caps every response at this many records.
 PAGE_SIZE = 1000
@@ -18,7 +18,7 @@ class LayerSignature:
     max_edited_at: datetime | None
 
 
-def layer_signature(client: httpx.Client, layer_url: str, oid_field: str) -> LayerSignature:
+def layer_signature(client: httpx2.Client, layer_url: str, oid_field: str) -> LayerSignature:
     """One statistics request. The layers publish no layer-level edit date."""
     stats = [
         {"statisticType": "count", "onStatisticField": oid_field, "outStatisticFieldName": "n"},
@@ -46,7 +46,7 @@ def layer_signature(client: httpx.Client, layer_url: str, oid_field: str) -> Lay
     )
 
 
-def fetch_features(client: httpx.Client, layer_url: str, oid_field: str) -> list[dict]:
+def fetch_features(client: httpx2.Client, layer_url: str, oid_field: str) -> list[dict]:
     """Fetch every feature of a layer as GeoJSON in UTM 16N, paging by resultOffset."""
     features: list[dict] = []
     while True:

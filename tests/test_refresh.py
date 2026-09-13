@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-import httpx
+import httpx2
 import pytest
 
 from app import cli
@@ -51,25 +51,25 @@ def city():
 def test_layer_signature_parses_statistics_in_any_case():
     def handler(request):
         assert request.url.params["where"] == "1=1"
-        return httpx.Response(200, json={"features": [{"attributes": {
+        return httpx2.Response(200, json={"features": [{"attributes": {
             "N": 1563, "MAX_OID": 22558, "MAX_EDITED": int(EDITED.timestamp() * 1000)}}]})
 
-    client = httpx.Client(transport=httpx.MockTransport(handler))
+    client = httpx2.Client(transport=httpx2.MockTransport(handler))
     assert layer_signature(client, "https://gis.example/layer/3", "OBJECTID_1") == \
         LayerSignature(1563, 22558, EDITED)
 
 
 def test_layer_signature_raises_on_arcgis_errors():
-    client = httpx.Client(transport=httpx.MockTransport(
-        lambda r: httpx.Response(200, json={"error": {"code": 400, "message": "bad field"}})))
+    client = httpx2.Client(transport=httpx2.MockTransport(
+        lambda r: httpx2.Response(200, json={"error": {"code": 400, "message": "bad field"}})))
     with pytest.raises(RuntimeError, match="bad field"):
         layer_signature(client, "https://gis.example/layer/3", "OBJECTID_1")
 
 
 def test_layer_signature_raises_when_the_server_returns_no_rows():
     # Seen from the city server on 2026-09-12: the fields, but no features.
-    client = httpx.Client(transport=httpx.MockTransport(
-        lambda r: httpx.Response(200, json={"fields": [{"name": "n"}], "features": []})))
+    client = httpx2.Client(transport=httpx2.MockTransport(
+        lambda r: httpx2.Response(200, json={"fields": [{"name": "n"}], "features": []})))
     with pytest.raises(RuntimeError, match="returned no statistics"):
         layer_signature(client, "https://gis.example/layer/3", "OBJECTID_1")
 

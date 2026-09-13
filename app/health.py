@@ -64,7 +64,7 @@ def first_line(text: str | None) -> str:
 
 
 def brief(error: str | None) -> str:
-    """An error's first line without the request URL httpx appends."""
+    """An error's first line without the request URL httpx2 appends."""
     return re.sub(r" for url '[^']*'", "", first_line(error))
 
 

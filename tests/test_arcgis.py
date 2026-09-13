@@ -1,4 +1,4 @@
-import httpx
+import httpx2
 import pytest
 
 from app.arcgis import PAGE_SIZE, fetch_features
@@ -9,19 +9,19 @@ CRS = {"type": "name", "properties": {"name": "EPSG:32616"}}
 
 def server(total: int, calls: list, body_override: dict | None = None):
     """A fake ArcGIS layer holding `total` features, honoring resultOffset."""
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         params = request.url.params
         calls.append(params)
         if body_override is not None:
-            return httpx.Response(200, json=body_override)
+            return httpx2.Response(200, json=body_override)
         offset, count = int(params["resultOffset"]), int(params["resultRecordCount"])
         ids = range(offset, min(offset + count, total))
-        return httpx.Response(200, json={
+        return httpx2.Response(200, json={
             "type": "FeatureCollection",
             "crs": CRS,
             "features": [{"type": "Feature", "properties": {"OID": i}, "geometry": None} for i in ids],
         })
-    return httpx.Client(transport=httpx.MockTransport(handler))
+    return httpx2.Client(transport=httpx2.MockTransport(handler))
 
 
 def test_pages_until_a_short_page():
