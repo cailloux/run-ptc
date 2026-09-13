@@ -5,7 +5,8 @@
 const view = document.body.dataset.view;   // 'left' or 'done'
 const $ = (id) => document.getElementById(id);
 
-// Fractional zoom so the city fills the page, which is the whole point of it.
+// A fractional zoom lets the first view fit the city to the page; see the
+// fitBounds below for why it's only the first view.
 const map = L.map('map', { preferCanvas: true, zoomControl: false, zoomSnap: 0.25 }).setView([33.39, -84.57], 13);
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
@@ -58,6 +59,9 @@ const one = (n) => n.toFixed(1);
   draw('cartpath', cartpaths);
   const all = L.featureGroup([quiet, loud.cartpath, loud.road]);
   if (all.getBounds().isValid()) map.fitBounds(all.getBounds(), { padding: [20, 20] });
+  // After that, zoom by whole levels like the main map: at quarter levels a
+  // scroll took four zoom animations and canvas redraws to go one level.
+  map.options.zoomSnap = 1;
 
   const c = stats.completion;
   if (view === 'left') {
