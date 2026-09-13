@@ -71,7 +71,6 @@ Store timestamps in UTC. Display them in US Eastern. Dates passed to Intervals a
 
 - Stage files explicitly with `git add <file>`. Never `git add .` or `git add -A`.
 - Use one branch per phase and open a PR when the phase passes its check.
-- `main` requires linear history (a repo ruleset), so PRs merge with **Rebase and merge**, never a merge commit.
 - Keep commits small, with messages that say what changed and why.
 
 ## Deployment
