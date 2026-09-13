@@ -56,29 +56,35 @@ def new_miles(conn: psycopg.Connection, latlngs: list[LatLng]) -> NewMiles:
         WITH line AS (
             SELECT ST_Transform(ST_SetSRID(ST_MakeLine(ST_MakePoint(lon, lat) ORDER BY i), 4326), 32616) AS geom
             FROM unnest(%(lats)s::float8[], %(lons)s::float8[]) WITH ORDINALITY AS p(lat, lon, i)
-        ), sample AS (
-            SELECT i, ST_LineInterpolatePoint(l.geom, i::float8 / k.n) AS pt, ST_Length(l.geom) / k.n AS step
-            FROM line l
-            CROSS JOIN LATERAL (SELECT GREATEST(1, CEIL(ST_Length(l.geom) / %(sample_m)s))::int AS n) k
-            CROSS JOIN LATERAL generate_series(0, k.n) i
-        ), on_edge AS (
+        ), k AS (
+            SELECT GREATEST(1, CEIL(ST_Length(geom) / %(sample_m)s))::int AS n, ST_Length(geom) AS len FROM line
+        ), sample AS MATERIALIZED (
+            -- One pass along the line: ST_LineInterpolatePoint per sample is
+            -- quadratic in the route's vertex count.
+            SELECT 0 AS i, ST_StartPoint(geom) AS pt FROM line
+            UNION ALL
+            SELECT coalesce(d.path[1], 1), d.geom
+            FROM line, k, ST_Dump(ST_LineInterpolatePoints(line.geom, 1.0 / k.n, true)) d
+        ), on_edge AS MATERIALIZED (
             -- f: the sample's position along its segment part, as a fraction.
-            SELECT s.i, e.segment_id, e.part_idx,
-                   e.part_from + (e.part_to - e.part_from) * ST_LineLocatePoint(e.geom, s.pt) AS f
+            SELECT s.i, e.segment_id, e.part_idx, e.f,
+                   e.f * ST_Length(ST_GeometryN(sg.geom, e.part_idx + 1)) AS along_m
             FROM sample s CROSS JOIN LATERAL (
-                SELECT segment_id, part_idx, part_from, part_to, geom FROM route_edge e
-                WHERE ST_DWithin(e.geom, s.pt, %(on_edge_m)s) ORDER BY e.geom <-> s.pt LIMIT 1
+                SELECT segment_id, part_idx, part_from + (part_to - part_from) * ST_LineLocatePoint(geom, s.pt) AS f
+                FROM route_edge
+                WHERE ST_DWithin(geom, s.pt, %(on_edge_m)s) ORDER BY geom <-> s.pt LIMIT 1
             ) e
-        ), iv AS ({NOT_RUN_SQL.format(segments="(SELECT segment_id FROM on_edge)")})
-        SELECT s.step, ST_Y(ST_Transform(s.pt, 4326)), ST_X(ST_Transform(s.pt, 4326)),
-               o.segment_id, o.part_idx,
-               o.f * ST_Length(ST_GeometryN(sg.geom, o.part_idx + 1)) AS along_m,
-               EXISTS (SELECT 1 FROM iv WHERE iv.segment_id = o.segment_id AND iv.part_idx = o.part_idx
-                                          AND o.f BETWEEN iv.a AND iv.b) AS not_run
+            JOIN segment sg ON sg.id = e.segment_id
+        ), iv AS MATERIALIZED ({NOT_RUN_SQL.format(segments="(SELECT segment_id FROM on_edge)")})
+        -- A sample on a node belongs to both intervals; DISTINCT ON keeps one row.
+        SELECT DISTINCT ON (s.i) (SELECT len / n FROM k), ST_Y(ST_Transform(s.pt, 4326)),
+               ST_X(ST_Transform(s.pt, 4326)), o.segment_id, o.part_idx, o.along_m,
+               iv.k IS NOT NULL AS not_run
         FROM sample s
         LEFT JOIN on_edge o ON o.i = s.i
-        LEFT JOIN segment sg ON sg.id = o.segment_id
-        ORDER BY s.i
+        LEFT JOIN iv ON iv.segment_id = o.segment_id AND iv.part_idx = o.part_idx
+                    AND o.f BETWEEN iv.a AND iv.b
+        ORDER BY s.i, iv.k NULLS LAST
     """, {
         "lats": [p[0] for p in latlngs], "lons": [p[1] for p in latlngs],
         "sample_m": SAMPLE_M, "on_edge_m": ON_EDGE_M,
