@@ -7,71 +7,127 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"
         integrity="sha512-h9FcoyWjHcOcmEVkxOfTLnmZFWIH0iZhZT1H2TbOq55xssQGEJHEaIm+PgoUaZbRvQTNTluNOEfb1ZRy6D3BOw=="
         crossorigin="anonymous" referrerpolicy="no-referrer">
+  <link rel="stylesheet" href="tokens.css">
   <link rel="stylesheet" href="style.css">
 </head>
-<body>
-  <div id="map"></div>
-  <div id="banner" hidden></div>
-  <div id="panel">
-    <h1>Run PTC <a id="status-link" href="status.html">Status</a></h1>
-    <div id="completion">Loading…</div>
+<body class="map-page">
+  <!-- View mode: the numbers you watch, and the ways in. -->
+  <header id="topbar" class="bar">
+    <a class="wordmark" href="./">Run PTC</a>
+    <div id="completion" class="completion">
+      <div class="figures"><b class="pct" id="cartpath-pct">—</b><span class="detail" id="cartpath-detail"></span></div>
+      <div class="meter"><i id="cartpath-meter"></i></div>
+    </div>
+    <div class="rule"></div>
+    <div id="completion-road" class="completion secondary">
+      <div class="figures"><b id="road-pct">—</b><span class="detail" id="road-detail"></span></div>
+      <div class="meter meter-sm"><i id="road-meter"></i></div>
+    </div>
+    <div class="spacer"></div>
     <div id="sync">
-      <div id="sync-status"></div>
-      <button id="sync-now" disabled>Sync now</button>
+      <span id="sync-status"></span>
+      <button id="sync-now" class="btn btn-icon" title="Sync now" aria-label="Sync now"><span class="glyph">↻</span></button>
     </div>
-    <div id="route">
-      <div class="route-row">
-        <button id="route-toggle">Plan a route</button>
-        <span id="route-distance"></span>
-      </div>
-      <div id="route-tools" hidden>
-        <div class="route-row">
-          <button id="route-undo" title="Undo (Ctrl/Cmd+Z)">Undo</button>
-          <button id="route-redo" title="Redo (Ctrl/Cmd+Shift+Z)">Redo</button>
-          <button id="route-retrace">Retrace to start</button>
-          <button id="route-clear">Clear</button>
-          <button id="route-export">Export GPX</button>
-        </div>
-        <div class="route-help">Click to add a waypoint; drag a waypoint to reroute. Shift-click the route to retrace back to that point.</div>
-      </div>
-      <div id="route-message"></div>
+    <div class="bar-actions">
+      <button id="route-toggle" class="btn btn-primary">Plan a route</button>
+      <button id="layers-toggle" class="btn" aria-pressed="false" aria-controls="legend">Layers</button>
+      <button id="data-toggle" class="btn" aria-pressed="false" aria-controls="data-drawer">Data</button>
     </div>
-    <table id="stats"></table>
-    <form id="find">
-      <input id="find-oid" type="number" placeholder="Cart path OBJECTID_1">
-      <button>Find</button>
-    </form>
-    <div id="legend">
-      <div>
-        <span class="swatch complete"></span>Complete cart path
-      </div>
-      <div>
-        <span class="swatch cart-run"></span>Run
-        <span class="swatch cart-not-run"></span>Not run
-        <span class="legend-note">(cart path, incomplete)</span>
-      </div>
-      <div>
-        <span class="swatch road-run"></span>Road run
-        <span class="swatch road-not-run"></span>Road not run
-      </div>
-      <div>
-        <span class="swatch excluded"></span>Excluded
-        <span class="swatch uncounted"></span>Not counted
-      </div>
-      <div>
-        <span class="dot missed"></span>Missed path node
-        <span class="dot missed-road"></span>Missed road node
-      </div>
-      <div>
-        <span class="dot hit"></span>Hit node
-        <span class="legend-note">(nodes show from zoom 15)</span>
-      </div>
-      <div>
-        <span class="swatch changed"></span>Latest city change
-        <span class="legend-note">(when turned on)</span>
-      </div>
+    <a id="status-link" href="status.html">Status</a>
+  </header>
+
+  <!-- Planning mode: replaces the top bar at the same height. -->
+  <header id="route" class="bar bar-dark" hidden>
+    <span class="mode-flag"><i></i>Planning</span>
+    <div class="route-figures"><b id="route-distance">0.00</b><span class="unit">mi</span></div>
+    <div class="rule"></div>
+    <div id="route-tools">
+      <button id="route-undo" class="btn btn-dark" title="Undo (Ctrl/Cmd+Z)">Undo</button>
+      <button id="route-redo" class="btn btn-dark" title="Redo (Ctrl/Cmd+Shift+Z)">Redo</button>
+      <button id="route-retrace" class="btn btn-dark" title="Back along the route to the start">Retrace to start</button>
+      <button id="route-clear" class="btn btn-dark">Clear</button>
+      <button id="route-export" class="btn btn-light">Export GPX</button>
     </div>
-  </div>
+    <div id="route-message" class="route-help"></div>
+    <div class="spacer"></div>
+    <button id="route-done" class="btn btn-outline-light" title="Done planning (Esc)">Done planning</button>
+  </header>
+
+  <div id="banner" hidden></div>
+
+  <main id="stage">
+    <div id="map"></div>
+    <div id="route-hint" hidden>Click a path or road to add a waypoint</div>
+
+    <aside id="legend" class="drawer" hidden aria-label="Layers">
+      <div class="drawer-head"><b>Layers</b><button class="btn-close" aria-label="Close">✕</button></div>
+      <div class="drawer-body">
+        <h3>Cart paths</h3>
+        <label class="layer-row"><input type="checkbox" data-layer="cartpath-not-run" checked>
+          <span class="swatch line" style="--c:var(--map-cartpath-not-run);--w:var(--map-w-cartpath-not-run)"></span>
+          <span class="layer-label">Not run</span></label>
+        <label class="layer-row"><input type="checkbox" data-layer="cartpath-run" checked>
+          <span class="swatch line" style="--c:var(--map-cartpath-run);--w:var(--map-w-cartpath-run)"></span>
+          <span class="layer-label">Run, segment incomplete</span></label>
+        <label class="layer-row"><input type="checkbox" data-layer="cartpath-complete" checked>
+          <span class="swatch line" style="--c:var(--map-cartpath-complete);--w:var(--map-w-cartpath-complete)"></span>
+          <span class="layer-label">Complete</span></label>
+
+        <h3>Roads</h3>
+        <label class="layer-row"><input type="checkbox" data-layer="road-not-run" checked>
+          <span class="swatch line" style="--c:var(--map-road-not-run);--w:var(--map-w-road-not-run)"></span>
+          <span class="layer-label">Not run</span></label>
+        <label class="layer-row"><input type="checkbox" data-layer="road-run" checked>
+          <span class="swatch line" style="--c:var(--map-road-run);--w:var(--map-w-road-run)"></span>
+          <span class="layer-label">Run</span></label>
+
+        <h3>Nodes <span class="note">from zoom 15</span></h3>
+        <label class="layer-row"><input type="checkbox" data-layer="nodes-missed-cartpath" checked>
+          <span class="swatch dot missed"></span>
+          <span class="layer-label">Missed, cart path</span></label>
+        <label class="layer-row"><input type="checkbox" data-layer="nodes-missed-road" checked>
+          <span class="swatch dot missed-road"></span>
+          <span class="layer-label">Missed, road</span></label>
+        <label class="layer-row"><input type="checkbox" data-layer="nodes-hit">
+          <span class="swatch dot hit"></span>
+          <span class="layer-label">Hit</span></label>
+
+        <h3>Extra</h3>
+        <label class="layer-row"><input type="checkbox" data-layer="tracks">
+          <span class="swatch line" style="--c:var(--map-track);--w:2"></span>
+          <span class="layer-label">Run tracks</span></label>
+        <label class="layer-row"><input type="checkbox" data-layer="islands">
+          <span class="swatch line dashed" style="--c:var(--map-island);--w:4"></span>
+          <span class="layer-label">Graph islands</span></label>
+        <label class="layer-row"><input type="checkbox" data-layer="changes">
+          <span class="swatch band" style="--c:var(--map-change-band)"></span>
+          <span class="layer-label">Latest city changes</span></label>
+        <label class="layer-row"><input type="checkbox" data-layer="excluded" checked>
+          <span class="swatch line dashed" style="--c:var(--map-excluded);--w:var(--map-w-excluded)"></span>
+          <span class="layer-label">Excluded &amp; not counted</span></label>
+      </div>
+    </aside>
+
+    <aside id="data-drawer" class="drawer" hidden aria-label="Data">
+      <div class="drawer-head"><b>Data</b><button class="btn-close" aria-label="Close">✕</button></div>
+      <div class="drawer-body">
+        <form id="find">
+          <input id="find-oid" type="number" placeholder="Cart path OBJECTID_1" aria-label="Cart path OBJECTID_1">
+          <button class="btn">Find</button>
+        </form>
+        <div id="find-error" class="field-error" hidden></div>
+        <table id="stats"></table>
+        <p id="runs-note" class="note"></p>
+        <div id="sync-detail"></div>
+        <button id="sync-now-full" class="btn btn-block">Sync now</button>
+        <p class="drawer-links">
+          <a href="status.html">Data status page →</a>
+          <span>Share views: <a href="left.html">What's left</a> · <a href="progress.html">Progress</a></span>
+        </p>
+      </div>
+    </aside>
+  </main>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"
           integrity="sha512-puJW3E/qXDqYp9IfhAI54BJEaWIfloJ7JWs7OeD5i6ruC9JZL1gERT1wjtwXFlh7CjE7ZJ+/vcRZRkIYIb6p4g=="
           crossorigin="anonymous" referrerpolicy="no-referrer"></script>
