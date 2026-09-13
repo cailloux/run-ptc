@@ -3,6 +3,7 @@ from typing import Literal
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response
+from psycopg.rows import dict_row
 from pydantic import BaseModel, Field
 
 from app import db, exclusions, health
@@ -11,7 +12,7 @@ from app.coverage import coverage_geojson
 from app.finish import finish_route, new_miles
 from app.graph import main_component
 from app.intervals import IntervalsClient
-from app.jobs import JobBusy, last_runs, start_job
+from app.jobs import JobBusy, start_job
 from app.matching import METERS_PER_MILE, metrics
 from app.refresh import refresh
 from app.routing import GraphMissing, RouteError, leg, snap
@@ -72,7 +73,7 @@ BUSY = "another job is running (sync, import, refresh, or recompute)"
 
 def _start_in_background(background: BackgroundTasks, name: str, fn, on_busy=None) -> dict:
     """Start a job from a button. The job's connection holds the lock until
-    the background task finishes. Poll GET /status (or /sync) for the result."""
+    the background task finishes. Poll GET /status for the result."""
     try:
         job = start_job(name, "button")
     except JobBusy:
@@ -240,13 +241,6 @@ def graph_islands() -> Response:
     return Response(body, media_type="application/geo+json")
 
 
-@router.get("/sync")
-def sync_status() -> dict:
-    """The latest sync (any trigger), the latest successful one, and whether a job is running."""
-    with db.connect() as conn:
-        return last_runs(conn, "sync")
-
-
 @router.post("/sync", status_code=202)
 def start_sync(request: Request, background: BackgroundTasks) -> dict:
     """Run the default incremental sync in the background."""
@@ -302,9 +296,6 @@ def changes() -> Response:
         JOIN (SELECT layer, max(changed_at) AS at FROM segment GROUP BY layer) latest
           ON latest.layer = s.layer AND s.changed_at = latest.at
     """, ())
-
-
-JOB_COLS = ("id", "job", "trigger", "status", "started_at", "finished_at", "summary", "error")
 
 
 @router.get("/status")
@@ -370,8 +361,9 @@ def status() -> dict:
         }
 
         nightly = health.nightly_last_run(conn)
-        jobs = [dict(zip(JOB_COLS, r)) for r in conn.execute(
-            f"SELECT {', '.join(JOB_COLS)} FROM job_run ORDER BY started_at DESC, id DESC LIMIT 20")]
+        jobs = conn.cursor(row_factory=dict_row).execute(
+            "SELECT id, job, trigger, status, started_at, finished_at, summary, error FROM job_run"
+            " ORDER BY started_at DESC, id DESC LIMIT 20").fetchall()
         episodes = health.recent_episodes(conn)
     stale_after = timedelta(hours=settings.stale_after_hours)
     return {
@@ -393,37 +385,18 @@ def stats() -> dict:
             "SELECT count(*), max(start_at) FROM activity WHERE status = 'city'"
         ).fetchone()
         completion = metrics(conn).as_dict()
-        sync_runs = last_runs(conn, "sync")
         rows = conn.execute("""
             SELECT s.layer,
-                   count(*) AS stored,
                    count(*) FILTER (WHERE counted AND NOT excluded) AS counted,
                    coalesce(sum(length_m) FILTER (WHERE counted AND NOT excluded), 0) AS counted_m,
-                   count(*) FILTER (WHERE excluded) AS excluded,
-                   coalesce(sum(length_m) FILTER (WHERE excluded), 0) AS excluded_m,
                    (SELECT count(*) FROM node n JOIN segment s2 ON s2.id = n.segment_id
                     WHERE s2.layer = s.layer) AS nodes
             FROM segment s GROUP BY s.layer
         """).fetchall()
     result = {
-        layer: {
-            "stored": stored,
-            "counted": counted,
-            "counted_mi": round(counted_m / METERS_PER_MILE, 2),
-            "excluded": excluded,
-            "excluded_mi": round(excluded_m / METERS_PER_MILE, 2),
-            "nodes": node_count,
-        }
-        for layer, stored, counted, counted_m, excluded, excluded_m, node_count in rows
+        layer: {"counted": counted, "counted_mi": round(counted_m / METERS_PER_MILE, 2), "nodes": nodes}
+        for layer, counted, counted_m, nodes in rows
     }
     result["runs"] = {"city": runs, "latest_start_at": latest}
     result["completion"] = completion
-    latest_sync = sync_runs["latest"]
-    result["last_sync"] = {
-        "finished_at": sync_runs["last_ok"]["finished_at"] if sync_runs["last_ok"] else None,
-        "headline": sync_runs["last_ok"]["headline"] if sync_runs["last_ok"] else None,
-        "latest_status": latest_sync["status"] if latest_sync else None,
-        "latest_error": latest_sync["error"] if latest_sync else None,
-        "running": sync_runs["running"],
-    }
     return result

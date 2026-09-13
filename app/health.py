@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 import psycopg
+from psycopg.rows import dict_row
 
 from app.config import Settings
 from app.jobs import job_running
@@ -100,32 +101,33 @@ def _advice(source: str, state: str, error: str | None) -> str | None:
 def source_health(conn: psycopg.Connection, settings: Settings, source: str,
                   now: datetime) -> Health:
     label, jobs = SOURCES[source]
-    latest = conn.execute("""
+    cur = conn.cursor(row_factory=dict_row)
+    latest = cur.execute("""
         SELECT id, job, trigger, status, started_at, finished_at, error FROM job_run
         WHERE job = ANY(%s) AND status <> 'running'
         ORDER BY finished_at DESC, id DESC LIMIT 1
     """, (list(jobs),)).fetchone()
-    last_ok = conn.execute("""
+    last_ok = cur.execute("""
         SELECT job, finished_at, summary FROM job_run
         WHERE job = ANY(%s) AND status = 'ok'
         ORDER BY finished_at DESC, id DESC LIMIT 1
     """, (list(jobs),)).fetchone()
-    if latest and latest[3] == "failed":
+    if latest and latest["status"] == "failed":
         state = "failing"
-    elif last_ok is None or now - last_ok[1] > timedelta(hours=settings.stale_after_hours):
+    elif last_ok is None or now - last_ok["finished_at"] > timedelta(hours=settings.stale_after_hours):
         state = "stale"
     else:
         state = "ok"
-    cols = ("id", "job", "trigger", "status", "started_at", "finished_at", "error")
+    if last_ok:
+        last_ok["headline"] = first_line(last_ok.pop("summary"))
     return Health(
         source=source,
         label=label,
         state=state,
-        last_ok={"job": last_ok[0], "finished_at": last_ok[1], "headline": first_line(last_ok[2])}
-                if last_ok else None,
-        latest=dict(zip(cols, latest)) if latest else None,
+        last_ok=last_ok,
+        latest=latest,
         running=_running_job(conn, jobs),
-        advice=_advice(source, state, latest[6] if latest else None),
+        advice=_advice(source, state, latest["error"] if latest else None),
         stale_hours=settings.stale_after_hours,
     )
 
@@ -135,11 +137,10 @@ def _running_job(conn: psycopg.Connection, jobs: tuple[str, ...]) -> dict | None
     # one behind until the app restarts and marks it interrupted.
     if not job_running(conn):
         return None
-    row = conn.execute("""
+    return conn.cursor(row_factory=dict_row).execute("""
         SELECT id, job, trigger, started_at FROM job_run
         WHERE job = ANY(%s) AND status = 'running' ORDER BY started_at DESC LIMIT 1
     """, (list(jobs),)).fetchone()
-    return dict(zip(("id", "job", "trigger", "started_at"), row)) if row else None
 
 
 def all_health(conn: psycopg.Connection, settings: Settings, now: datetime) -> dict[str, Health]:
@@ -243,6 +244,7 @@ def mark_sent(conn: psycopg.Connection, key: str) -> None:
 
 
 def recent_episodes(conn: psycopg.Connection, limit: int = 10) -> list[dict]:
-    cols = ("id", "source", "problem", "detail", "since", "alerted_at", "recovered_at", "closed_at")
-    return [dict(zip(cols, r)) for r in conn.execute(
-        f"SELECT {', '.join(cols)} FROM alert_episode ORDER BY since DESC, id DESC LIMIT %s", (limit,))]
+    return conn.cursor(row_factory=dict_row).execute("""
+        SELECT id, source, problem, detail, since, alerted_at, recovered_at, closed_at
+        FROM alert_episode ORDER BY since DESC, id DESC LIMIT %s
+    """, (limit,)).fetchall()
