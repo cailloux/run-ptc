@@ -360,8 +360,19 @@
     }));
   }
 
+  // Node dots sit over the lines and would take the picking clicks, so
+  // they're hidden while picking and the ones that were on come back after.
+  let hiddenNodes = [];
   function setPicking(on) {
     picking = on;
+    if (on) {
+      hiddenNodes = Object.values(nodeLayers).map((n) => n.wrapper).filter((w) => map.hasLayer(w));
+      hiddenNodes.forEach((w) => map.removeLayer(w));
+    } else {
+      hiddenNodes.forEach((w) => map.addLayer(w));
+      hiddenNodes = [];
+      restack();
+    }
     picks.clear();
     drawPicks();
     render();
