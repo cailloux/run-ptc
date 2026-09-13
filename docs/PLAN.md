@@ -191,15 +191,14 @@ Since Phase 8 the coverage palette is "Graphite": finished ground is gray and co
 
 A top bar shows cart path completion (percentage, miles, segments) and road miles covered, the last sync, and the ways in: Plan a route, a Layers drawer (the legend, whose rows are the layer toggles), a Data drawer (find by OID, the stats table, sync detail), and the status page. The UI is desktop-first and usable on a phone.
 
-The sync button runs the same incremental sync as the CLI (a week before the newest run through today) in the background, and the panel polls until it finishes, then reloads the coverage. Sync, import, and recompute share one lock, so only one runs at a time from any trigger; a second request gets a 409 from the API or an "another job is running" exit from the CLI. Every run of a data job is recorded in `job_run` (trigger, times, status, summary, error), which the panel reads for the last sync time.
+The sync button runs the same incremental sync as the CLI (a week before the newest run through today) in the background, and the panel polls until it finishes, then reloads the coverage. Sync, import, and recompute share one lock, so only one runs at a time from any trigger; a second request gets a 409 from the API or an "another job is running" exit from the CLI. Every run of a data job is recorded in `job_run` (trigger, times, status, summary, error), which `GET /status` reads for the last sync time.
 
 ```
-GET  /stats                            metrics, counts, last sync
+GET  /stats                            metrics, counts per layer, city runs
 GET  /network?layer=cartpath|road      GeoJSON with coverage state
 GET  /nodes?layer=&status=missed|hit
 GET  /nodes/{id}                       hit run's date, name, Intervals id
 GET  /activities
-GET  /sync                             latest sync, last success, running?
 POST /sync                             202 started, 409 busy, 503 no credentials
 POST /refresh                          city check in the background; 202, 409 busy
 GET  /status                           data health, city layers, alert episodes, recent jobs

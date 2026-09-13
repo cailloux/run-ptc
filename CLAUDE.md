@@ -96,7 +96,7 @@ scripts/kirk-test.sh
 scripts/kirk-dev.sh
 # apply migrations (also automatic on app startup)
 ssh kirk docker exec run-ptc python -m app.cli migrate
-# import city layers
+# import every city layer (a forced refresh: download guard and change report)
 ssh kirk docker exec run-ptc python -m app.cli import
 # reapply exclusions after editing config/exclusions.yaml
 ssh kirk docker exec run-ptc python -m app.cli exclusions
