@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas"><style>
+body{margin:0;background:#e8e7e3;font:13px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;color:#1a1a19}
+a{color:#1a1a19}a:hover{color:#000}
+.dv-turn{padding:40px 44px 32px;border-bottom:2px solid rgba(0,0,0,.12)}
+.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 6px}
+.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a19;color:#fff;text-decoration:none}
+.dv-tname{font:600 13px/1.2 system-ui,sans-serif}
+.dv-sub{margin:0 0 22px;max-width:760px;color:#55534e;font-size:12.5px}
+.dv-opts{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start}
+.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px}
+.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.09);color:#1a1a19;text-decoration:none}
+.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 11.5px/1.3 system-ui,sans-serif;color:#55534e}
+.dv-card{background:#fff;border:1px solid rgba(0,0,0,.16);overflow:hidden}
+.dv-opt:target .dv-oid{background:#1a1a19;color:#fff}
+.dv-next{margin:22px 0 0;font:12px/1.6 system-ui,sans-serif;color:#55534e;max-width:820px}
+.dv-notes{margin:10px 0 0;max-width:420px;font:12px/1.5 system-ui,sans-serif;color:#55534e}
+.dv-notes b{color:#1a1a19}
+</style></helmet>
+
+<section class="dv-turn" id="t2">
+<div class="dv-thd"><a class="dv-tid" href="#t2">2</a><span class="dv-tname">The build — on <a class="dv-oid" href="#1b">1b</a>, planning-first, plus a share page</span></div>
+<p class="dv-sub">14px base, system fonts, light only. Coverage palette reproposed in two directions (<a class="dv-oid" href="#2a">2a</a> / <a class="dv-oid" href="#2b">2b</a>) — every screen below is drawn in <a class="dv-oid" href="#2b">2b</a>. Route now draws in two colors: new ground vs ground you've already run.</p>
+<div class="dv-opts">
+
+<div class="dv-opt" id="2a">
+<div class="dv-olabel"><a class="dv-oid" href="#2a">2a</a>Palette A — “Ember”: done cools down, what's left burns</div>
+<div class="dv-card" style="width:436px">
+  <div style="position:relative;height:250px;background:#efefef">
+    <svg viewBox="0 0 436 250" style="position:absolute;inset:0;width:100%;height:100%"><g fill="none" stroke-linecap="round"><path d="M20 215 L110 195 L200 205 L300 175 L418 180" stroke="#7e7c76" stroke-width="3"/><path d="M30 60 L120 70 L210 45 L330 65" stroke="#a8c4d8" stroke-width="1.5"/><path d="M55 235 L65 150 L110 110 L170 100" stroke="#ff4d1f" stroke-width="5"/><path d="M170 100 L240 75 L330 95" stroke="#1f7a5c" stroke-width="2"/><path d="M110 110 L140 70 L210 45" stroke="#4b8fbf" stroke-width="2.5"/><path d="M240 75 L265 150 L300 175" stroke="#56544f" stroke-width="2.5" stroke-dasharray="4 6"/><path d="M65 150 L20 135" stroke="#d2d1cc" stroke-width="1.5"/></g><circle cx="110" cy="110" r="3.5" fill="#fff" stroke="#2b2a27" stroke-width="1.5"/><circle cx="170" cy="100" r="3" fill="#ffd400" stroke="#2b2a27" stroke-width="1.5"/></svg>
+  </div>
+  <div style="padding:14px 16px;font-size:13px;display:flex;flex-direction:column;gap:7px;border-top:1px solid #dcd9d2">
+    <div style="display:flex;align-items:center;gap:10px"><span style="width:26px;border-top:5px solid #ff4d1f"></span><b>Cart path not run</b> <span style="color:#85837c;font-family:ui-monospace,Menlo,monospace;font-size:11.5px">#ff4d1f · 5</span></div>
+    <div style="display:flex;align-items:center;gap:10px"><span style="width:26px;border-top:2.5px solid #4b8fbf"></span>Run, segment incomplete <span style="color:#85837c;font-family:ui-monospace,Menlo,monospace;font-size:11.5px">#4b8fbf · 2.5</span></div>
+    <div style="display:flex;align-items:center;gap:10px"><span style="width:26px;border-top:2px solid #1f7a5c"></span>Complete <span style="color:#85837c;font-family:ui-monospace,Menlo,monospace;font-size:11.5px">#1f7a5c · 2</span></div>
+    <div style="display:flex;align-items:center;gap:10px"><span style="width:26px;border-top:3px solid #7e7c76"></span>Road not run <span style="color:#85837c;font-family:ui-monospace,Menlo,monospace;font-size:11.5px">#7e7c76 · 3</span></div>
+    <div style="display:flex;align-items:center;gap:10px"><span style="width:26px;border-top:1.5px solid #a8c4d8"></span>Road run <span style="color:#85837c;font-family:ui-monospace,Menlo,monospace;font-size:11.5px">#a8c4d8 · 1.5</span></div>
+    <div style="display:flex;align-items:center;gap:10px"><span style="width:26px;border-top:5px solid #6a2bd9"></span>Route, new ground <span style="color:#85837c;font-family:ui-monospace,Menlo,monospace;font-size:11.5px">#6a2bd9 · 5</span></div>
+    <div style="display:flex;align-items:center;gap:10px"><span style="width:26px;border-top:5px solid #b9a0e8"></span>Route, already run <span style="color:#85837c;font-family:ui-monospace,Menlo,monospace;font-size:11.5px">#b9a0e8 · 5</span></div>
+  </div>
+</div>
+<p class="dv-notes">Orange gets hotter and heavier (#d95926 → #ff4d1f, 4 → 5px); run-but-incomplete stays a blue but cooler and quieter; complete drops to 2px so finished ground sinks toward the basemap. Roads keep the same logic one step down in weight. Route moves off magenta to violet so it can't be confused with the hot orange.</p>
+</div>
+
+<div class="dv-opt" id="2b">
+<div class="dv-olabel"><a class="dv-oid" href="#2b">2b</a>Palette B — “Graphite” · chosen: everything done is gray, color means unfinished</div>
+<div class="dv-card" style="width:436px">
+  <div style="position:relative;height:250px;background:#efefef">
+    <svg viewBox="0 0 436 250" style="position:absolute;inset:0;width:100%;height:100%"><g fill="none" stroke-linecap="round"><path d="M20 215 L110 195 L200 205 L300 175 L418 180" stroke="#ffb01f" stroke-width="3"/><path d="M30 60 L120 70 L210 45 L330 65" stroke="#c4c1ba" stroke-width="1.5"/><path d="M55 235 L65 150 L110 110 L170 100" stroke="#ff3b1f" stroke-width="5"/><path d="M170 100 L240 75 L330 95" stroke="#6b6862" stroke-width="2"/><path d="M110 110 L140 70 L210 45" stroke="#34332f" stroke-width="2.5"/><path d="M240 75 L265 150 L300 175" stroke="#9a978f" stroke-width="2.5" stroke-dasharray="4 6"/><path d="M65 150 L20 135" stroke="#dedcd6" stroke-width="1.5"/></g><circle cx="110" cy="110" r="3.5" fill="#fff" stroke="#2b2a27" stroke-width="1.5"/><circle cx="170" cy="100" r="3" fill="#ffb01f" stroke="#2b2a27" stroke-width="1.5"/></svg>
+  </div>
+  <div style="padding:14px 16px;font-size:13px;display:flex;flex-direction:column;gap:7px;border-top:1px solid #dcd9d2">
+    <div style="display:flex;align-items:center;gap:10px"><span style="width:26px;border-top:5px solid #ff3b1f"></span><b>Cart path not run</b> <span style="color:#85837c;font-family:ui-monospace,Menlo,monospace;font-size:11.5px">#ff3b1f · 5</span></div>
+    <div style="display:flex;align-items:center;gap:10px"><span style="width:26px;border-top:3px solid #ffb01f"></span>Road not run <span style="color:#85837c;font-family:ui-monospace,Menlo,monospace;font-size:11.5px">#ffb01f · 3</span></div>
+    <div style="display:flex;align-items:center;gap:10px"><span style="width:26px;border-top:2.5px solid #34332f"></span>Run, segment incomplete <span style="color:#85837c;font-family:ui-monospace,Menlo,monospace;font-size:11.5px">#34332f · 2.5</span></div>
+    <div style="display:flex;align-items:center;gap:10px"><span style="width:26px;border-top:2px solid #6b6862"></span>Complete <span style="color:#85837c;font-family:ui-monospace,Menlo,monospace;font-size:11.5px">#6b6862 · 2</span></div>
+    <div style="display:flex;align-items:center;gap:10px"><span style="width:26px;border-top:1.5px solid #c4c1ba"></span>Road run <span style="color:#85837c;font-family:ui-monospace,Menlo,monospace;font-size:11.5px">#c4c1ba · 1.5</span></div>
+    <div style="display:flex;align-items:center;gap:10px"><span style="width:26px;border-top:5px solid #1b6ef3"></span>Route, new ground <span style="color:#85837c;font-family:ui-monospace,Menlo,monospace;font-size:11.5px">#1b6ef3 · 5</span></div>
+    <div style="display:flex;align-items:center;gap:10px"><span style="width:26px;border-top:5px solid #9dc2fb"></span>Route, already run <span style="color:#85837c;font-family:ui-monospace,Menlo,monospace;font-size:11.5px">#9dc2fb · 5</span></div>
+  </div>
+  <div style="padding:0 16px 14px;font-size:12.5px;color:#5c5a54">Two colors total: red for paths left, amber for roads left. Everything you've finished is graphite, darker where a segment is still partly incomplete.</div>
+</div>
+<p class="dv-notes">Reads as a to-do list at a glance and photographs well for the share page, but you lose the run/complete distinction as a <i>color</i> — it survives only as light vs dark gray.</p>
+</div>
+
+<div class="dv-opt" id="2c">
+<div class="dv-olabel"><a class="dv-oid" href="#2c">2c</a>Map page — default (view mode), all drawers closed</div>
+<div class="dv-card" style="width:1040px">
+  <div style="height:640px;display:flex;flex-direction:column;font-size:14px">
+    <div style="flex:none;display:flex;align-items:center;gap:20px;padding:0 16px;height:56px;background:#fff;border-bottom:1px solid #dcd9d2">
+      <span style="font:700 13px/1 system-ui;letter-spacing:.11em;text-transform:uppercase">Run PTC</span>
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="display:flex;align-items:baseline;gap:7px"><b style="font:700 22px/1 system-ui;letter-spacing:-.02em">50.9%</b><span style="font-size:12.5px;color:#5c5a54">52.7 / 103.6 cart path mi · 327 / 780 segments</span></div>
+          <div style="width:290px;height:6px;background:#e7e4de;border-radius:3px;overflow:hidden"><div style="width:50.9%;height:100%;background:#34332f"></div></div>
+        </div>
+      </div>
+      <div style="width:1px;height:30px;background:#e7e4de"></div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <div style="display:flex;align-items:baseline;gap:7px"><b style="font:600 15px/1 system-ui;color:#5c5a54">33.8%</b><span style="font-size:12.5px;color:#85837c">84.0 / 248.5 road mi</span></div>
+        <div style="width:150px;height:4px;background:#e7e4de;border-radius:2px;overflow:hidden"><div style="width:33.8%;height:100%;background:#8b8983"></div></div>
+      </div>
+      <span style="flex:1"></span>
+      <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:#85837c"><span>Synced 1:51 PM</span><button style="font:600 13px system-ui;width:30px;height:30px;border:1px solid #dcd9d2;background:#fff;border-radius:6px;color:#5c5a54;cursor:pointer">↻</button></div>
+      <button style="font:600 14px system-ui;padding:9px 16px;border:1px solid #1b1a18;background:#1b1a18;color:#fff;border-radius:6px;cursor:pointer">Plan a route</button>
+      <button style="font:500 14px system-ui;padding:9px 13px;border:1px solid #dcd9d2;background:#fff;border-radius:6px;cursor:pointer">Layers</button>
+      <button style="font:500 14px system-ui;padding:9px 13px;border:1px solid #dcd9d2;background:#fff;border-radius:6px;cursor:pointer">Data</button>
+      <a href="#2c" style="font-size:13.5px;color:#5c5a54;text-decoration:none">Status</a>
+    </div>
+    <div style="flex:1;position:relative;background:#efefef">
+      <svg viewBox="0 0 1040 584" style="position:absolute;inset:0;width:100%;height:100%"><g fill="none" stroke-linecap="round"><path d="M70 500 L250 460 L430 480 L640 410 L960 420" stroke="#ffb01f" stroke-width="3"/><path d="M120 150 L300 175 L520 120 L840 165" stroke="#c4c1ba" stroke-width="1.5"/><path d="M170 530 L205 350 L360 275 L560 250" stroke="#ff3b1f" stroke-width="5"/><path d="M560 250 L730 200 L965 235" stroke="#6b6862" stroke-width="2"/><path d="M360 275 L450 190 L520 120" stroke="#34332f" stroke-width="2.5"/><path d="M730 200 L790 320 L960 420" stroke="#9a978f" stroke-width="2.5" stroke-dasharray="4 6"/><path d="M205 350 L110 320" stroke="#dedcd6" stroke-width="1.5"/><path d="M430 480 L470 380 L560 250" stroke="#ff3b1f" stroke-width="5"/><path d="M640 410 L700 330 L730 200" stroke="#34332f" stroke-width="2.5"/></g><g><circle cx="360" cy="275" r="3.5" fill="#fff" stroke="#2b2a27" stroke-width="1.5"/><circle cx="470" cy="380" r="3.5" fill="#fff" stroke="#2b2a27" stroke-width="1.5"/><circle cx="640" cy="410" r="3" fill="#ffb01f" stroke="#2b2a27" stroke-width="1.5"/><circle cx="730" cy="200" r="2" fill="#333"/><circle cx="520" cy="120" r="2" fill="#333"/></g></svg>
+      <div style="position:absolute;left:16px;top:16px;width:30px;background:#fff;border:1px solid #dcd9d2;border-radius:6px;font:400 16px/29px system-ui;text-align:center;color:#5c5a54"><div>+</div><div style="border-top:1px solid #e7e4de">−</div></div>
+      
+    </div>
+  </div>
+</div>
+<p class="dv-notes"><b>Nothing floats over the map except the map's own controls.</b> The two numbers you check constantly live in the bar; Layers and Data are drawers that open one at a time. The Leaflet layers control is removed — its contents move into the Layers drawer (<a class="dv-oid" href="#2g">2g</a>), which frees the bottom-right corner.</p>
+</div>
+
+<div class="dv-opt" id="2d">
+<div class="dv-olabel"><a class="dv-oid" href="#2d">2d</a>Planning mode — route bar replaces the top bar, elevation strip open</div>
+<div class="dv-card" style="width:1040px">
+  <div style="height:640px;display:flex;flex-direction:column;font-size:14px">
+    <div style="flex:none;display:flex;align-items:center;gap:14px;padding:0 16px;height:56px;background:#1b1a18;color:#fff">
+      <span style="display:flex;align-items:center;gap:8px;height:34px;font:600 12px/1 system-ui;letter-spacing:.1em;text-transform:uppercase;color:#bcd6ff"><span style="width:9px;height:9px;border-radius:50%;background:#1b6ef3;box-shadow:0 0 0 3px rgba(27,110,243,.35)"></span>Planning</span>
+      <div style="display:flex;align-items:center;gap:9px;height:34px"><span style="display:flex;align-items:baseline;gap:5px"><b style="font:700 24px/1 system-ui;letter-spacing:-.02em">4.82</b><span style="font:400 13px/1 system-ui;color:#b3afa6">mi</span></span><span style="display:inline-flex;align-items:center;gap:6px;height:24px;font:500 12.5px/1 system-ui;background:#14315e;color:#cfe2ff;padding:0 10px;border-radius:999px"><span style="width:14px;border-top:3px solid #9dc2fb"></span>3.10 mi new</span></div>
+      <div style="width:1px;height:28px;background:#3a3833"></div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <button style="display:inline-flex;align-items:center;height:34px;padding:0 12px;font:500 13.5px/1 system-ui;border-radius:6px;cursor:pointer;border:1px solid #3a3833;background:#26241f;color:#fff">Undo</button>
+        <button style="display:inline-flex;align-items:center;height:34px;padding:0 12px;font:500 13.5px/1 system-ui;border-radius:6px;cursor:pointer;border:1px solid #2b2a27;background:#201f1c;color:#6d6a63;cursor:default">Redo</button>
+        <button style="display:inline-flex;align-items:center;height:34px;padding:0 12px;font:500 13.5px/1 system-ui;border-radius:6px;cursor:pointer;border:1px solid #3a3833;background:#26241f;color:#fff">Retrace</button>
+        <button style="display:inline-flex;align-items:center;height:34px;padding:0 12px;font:500 13.5px/1 system-ui;border-radius:6px;cursor:pointer;border:1px solid #3a3833;background:#26241f;color:#fff">Clear</button>
+        <button style="display:inline-flex;align-items:center;height:34px;padding:0 12px;font:500 13.5px/1 system-ui;border-radius:6px;cursor:pointer;font-weight:600;border:1px solid #fff;background:#fff;color:#1b1a18">Export GPX</button>
+        <button style="display:inline-flex;align-items:center;height:34px;padding:0 12px;font:500 13.5px/1 system-ui;border-radius:6px;cursor:pointer;font-weight:600;border:1px solid #55524b;background:transparent;color:#fff">Export FIT</button>
+      </div>
+      <span style="flex:1"></span>
+      <span style="font:400 12.5px/1 system-ui;color:#b3afa6">Shift-click to retrace</span>
+      <button style="display:inline-flex;align-items:center;height:34px;padding:0 12px;font:500 13.5px/1 system-ui;border-radius:6px;cursor:pointer;font-weight:600;padding:0 14px;border:1px solid #55524b;background:transparent;color:#fff">Done planning</button>
+    </div>
+    <div style="flex:1;position:relative;background:#efefef">
+      <svg viewBox="0 0 1040 448" style="position:absolute;inset:0;width:100%;height:100%"><g fill="none" stroke-linecap="round"><path d="M70 380 L250 345 L430 360 L640 300 L960 310" stroke="#ffb01f" stroke-width="3"/><path d="M120 110 L300 130 L520 90 L840 125" stroke="#c4c1ba" stroke-width="1.5"/><path d="M170 405 L205 265 L360 205 L560 185" stroke="#ff3b1f" stroke-width="5"/><path d="M560 185 L730 150 L965 175" stroke="#6b6862" stroke-width="2"/><path d="M360 205 L450 140 L520 90" stroke="#34332f" stroke-width="2.5"/><path d="M205 265 L360 205 L560 185 L730 150" stroke="#fff" stroke-width="11"/><path d="M205 265 L360 205 L560 185" stroke="#1b6ef3" stroke-width="5"/><path d="M560 185 L730 150" stroke="#9dc2fb" stroke-width="5"/></g><g><circle cx="205" cy="265" r="7" fill="#1b1a18" stroke="#fff" stroke-width="3"/><circle cx="560" cy="185" r="7" fill="#fff" stroke="#1b6ef3" stroke-width="3"/><circle cx="730" cy="150" r="7" fill="#1b6ef3" stroke="#fff" stroke-width="3"/><circle cx="452" cy="196" r="5.5" fill="#fff" stroke="#1b1a18" stroke-width="2"/></g></svg>
+      <div style="position:absolute;inset:0;border:2px solid #1b6ef3;pointer-events:none"></div>
+      <div style="position:absolute;left:16px;top:16px;width:30px;background:#fff;border:1px solid #dcd9d2;border-radius:6px;font:400 16px/29px system-ui;text-align:center;color:#5c5a54"><div>+</div><div style="border-top:1px solid #e7e4de">−</div></div>
+      <div style="position:absolute;left:50%;transform:translateX(-50%);top:14px;background:#fff;border:1px solid #b9d2fb;border-radius:999px;padding:6px 14px;font-size:12.5px;color:#14315e;box-shadow:0 1px 4px rgba(0,0,0,.1)">Click a path or road to add a waypoint</div>
+      <div style="position:absolute;right:12px;bottom:12px;background:rgba(255,255,255,.88);border-radius:4px;padding:3px 7px;font-size:11px;color:#5c5a54">© OpenStreetMap contributors</div>
+    </div>
+    <div style="flex:none;background:#fff;border-top:1px solid #dcd9d2">
+      <div style="display:flex;align-items:center;gap:14px;padding:8px 16px 0;font-size:12.5px;color:#5c5a54">
+        <button style="font:600 12.5px system-ui;display:flex;align-items:center;gap:7px;background:none;border:0;color:#1b1a18;cursor:pointer;padding:0">⌄ Elevation</button>
+        <span><b style="color:#1b1a18">+312 ft</b> gain · −298 ft loss</span>
+        <span style="color:#85837c">Max grade 6.2% at 2.4 mi</span>
+        <span style="flex:1"></span>
+        <span style="color:#85837c">Hover the profile to follow it on the map</span>
+      </div>
+      <svg viewBox="0 0 1008 78" style="display:block;width:calc(100% - 32px);height:78px;margin:4px 16px 6px">
+        <defs><linearGradient id="elev" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfe0fb"/><stop offset="1" stop-color="#eef4ff"/></linearGradient></defs>
+        <path d="M0 62 L60 55 L120 58 L190 40 L250 44 L320 22 L390 34 L470 30 L540 48 L610 38 L690 52 L760 44 L840 58 L920 50 L1008 60 L1008 78 L0 78 Z" fill="url(#elev)"/>
+        <path d="M0 62 L60 55 L120 58 L190 40 L250 44 L320 22 L390 34 L470 30 L540 48 L610 38 L690 52 L760 44 L840 58 L920 50 L1008 60" fill="none" stroke="#1b6ef3" stroke-width="2"/>
+        <line x1="628" y1="0" x2="628" y2="78" stroke="#1b1a18" stroke-width="1"/><circle cx="628" cy="41" r="4" fill="#fff" stroke="#1b1a18" stroke-width="2"/>
+        <g stroke="#e7e4de"><line x1="209" y1="66" x2="209" y2="78"/><line x1="418" y1="66" x2="418" y2="78"/><line x1="627" y1="66" x2="627" y2="78"/><line x1="836" y1="66" x2="836" y2="78"/></g>
+        <g fill="#85837c" font-family="system-ui" font-size="10"><text x="213" y="76">1 mi</text><text x="422" y="76">2 mi</text><text x="631" y="76">3 mi</text><text x="840" y="76">4 mi</text></g>
+      </svg>
+    </div>
+  </div>
+</div>
+<p class="dv-notes"><b>Planning is a mode, not a panel.</b> The bar goes dark, the map gets a violet edge, popups stay suppressed, Esc or Done exits. Distance is the biggest number on screen; <b>new miles</b> sits next to it and the route itself is drawn violet where it covers new ground and pale violet where you've already run. Elevation docks under the map, collapses to its one-line summary on the chevron, and remembers that in localStorage. Elevation is <i>not backed yet</i> — I've specced the strip so it can arrive later without moving anything.</p>
+</div>
+
+<div class="dv-opt" id="2e">
+<div class="dv-olabel"><a class="dv-oid" href="#2e">2e</a>Freshness banners — stale and failing, long error truncated</div>
+<div class="dv-card" style="width:660px;padding:18px 18px 20px;display:flex;flex-direction:column;gap:14px;font-size:14px">
+  <div style="display:flex;gap:12px;align-items:flex-start;background:#fff7e0;border:1px solid #e8c26a;border-left:4px solid #c98a00;border-radius:6px;padding:11px 13px">
+    <span style="flex:none;width:20px;height:20px;border-radius:50%;background:#c98a00;color:#fff;font:700 13px/20px system-ui;text-align:center" aria-hidden="true">!</span>
+    <div style="flex:1"><b style="font-weight:600">City data stale</b><div style="color:#6b5200;margin-top:2px">The nightly script hasn't run since Sep 10, 2026, 3:00 AM.</div></div>
+    <a href="#2e" style="flex:none;font-weight:600;font-size:13.5px;color:#6b5200">Status page →</a>
+  </div>
+  <div style="display:flex;gap:12px;align-items:flex-start;background:#fdeceb;border:1px solid #e39a94;border-left:4px solid #b3261e;border-radius:6px;padding:11px 13px">
+    <span style="flex:none;width:20px;height:20px;border-radius:50%;background:#b3261e;color:#fff;font:700 12px/20px system-ui;text-align:center" aria-hidden="true">✕</span>
+    <div style="flex:1;min-width:0">
+      <b style="font-weight:600">Intervals sync failing</b>
+      <div style="color:#7a1911;margin-top:2px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">HTTPStatusError: Client error '401 Unauthorized' <span style="color:#9c5049">· Sep 12, 2026, 5:36 PM</span></div>
+    </div>
+    <a href="#2e" style="flex:none;font-weight:600;font-size:13.5px;color:#7a1911">Status page →</a>
+  </div>
+  <div style="font-size:12.5px;color:#5c5a54">Sits directly under the top bar, full width, pushing the map down — it never covers anything. Two problems stack as two rows. Error text clamps to two lines; the full string is on the status page.</div>
+</div>
+<p class="dv-notes">Icon + bold label + color, so state is never color alone. Colors are text/status tokens, unrelated to the map lines.</p>
+</div>
+
+<div class="dv-opt" id="2f">
+<div class="dv-olabel"><a class="dv-oid" href="#2f">2f</a>Popups — segment, node, run track</div>
+<div class="dv-card" style="width:660px;padding:20px;background:#efefef;display:flex;gap:16px;flex-wrap:wrap;font-size:14px">
+  <div style="width:290px;background:#fff;border-radius:8px;box-shadow:0 2px 12px rgba(0,0,0,.18);overflow:hidden">
+    <div style="display:flex;align-items:center;gap:9px;padding:11px 14px;border-bottom:1px solid #e7e4de"><span style="width:20px;border-top:5px solid #ff3b1f;flex:none"></span><b style="font-size:14.5px">Not run</b><span style="font-size:12.5px;color:#85837c">this piece, 214 m</span></div>
+    <dl style="margin:0;padding:10px 14px 12px;display:grid;grid-template-columns:max-content 1fr;gap:4px 14px;font-size:13px">
+      <dt style="color:#85837c">OID</dt><dd style="margin:0;font-family:ui-monospace,Menlo,monospace">12062</dd>
+      <dt style="color:#85837c">Name</dt><dd style="margin:0">Robinson Rd path</dd>
+      <dt style="color:#85837c">Type</dt><dd style="margin:0">Cart path</dd>
+      <dt style="color:#85837c">Length</dt><dd style="margin:0">486 m · 2 parts</dd>
+      <dt style="color:#85837c">Nodes hit</dt><dd style="margin:0">4 of 19</dd>
+      <dt style="color:#85837c">City changed</dt><dd style="margin:0">Aug 28, 2026</dd>
+    </dl>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:16px;width:290px">
+    <div style="background:#fff;border-radius:8px;box-shadow:0 2px 12px rgba(0,0,0,.18);overflow:hidden">
+      <div style="display:flex;align-items:center;gap:9px;padding:11px 14px;border-bottom:1px solid #e7e4de"><span style="width:11px;height:11px;border-radius:50%;background:#333;flex:none"></span><b style="font-size:14.5px">Hit node</b></div>
+      <div style="padding:10px 14px 12px;font-size:13px"><div style="font-weight:600">Sep 12, 2026</div><div style="color:#5c5a54">Morning run · Peachtree City</div><a href="#2f" style="display:inline-block;margin-top:8px;font-size:13px;font-weight:600">Open in Intervals ↗</a></div>
+    </div>
+    <div style="background:#fff;border-radius:8px;box-shadow:0 2px 12px rgba(0,0,0,.18);overflow:hidden">
+      <div style="display:flex;align-items:center;gap:9px;padding:11px 14px;border-bottom:1px solid #e7e4de"><span style="width:11px;height:11px;border-radius:50%;background:#fff;border:1.5px solid #2b2a27;flex:none"></span><b style="font-size:14.5px">Missed node</b><span style="font-size:12.5px;color:#85837c">radius 15 m</span></div>
+      <div style="padding:10px 14px 12px;font-size:13px;color:#5c5a54">No run has passed within 15 m of this node.</div>
+    </div>
+    <div style="background:#fff;border-radius:8px;box-shadow:0 2px 12px rgba(0,0,0,.18);overflow:hidden">
+      <div style="display:flex;align-items:center;gap:9px;padding:11px 14px;border-bottom:1px solid #e7e4de"><span style="width:20px;border-top:2px solid #e6550d;opacity:.6;flex:none"></span><b style="font-size:14.5px">Run track</b></div>
+      <div style="padding:10px 14px 12px;font-size:13px"><div style="font-weight:600">Sep 12, 2026, 6:42 AM</div><div style="color:#5c5a54">Morning run · 6.31 mi · 2 parts</div><a href="#2f" style="display:inline-block;margin-top:8px;font-size:13px;font-weight:600">Open in Intervals ↗</a></div>
+    </div>
+  </div>
+</div>
+<p class="dv-notes">One structure: swatch + state headline + label/value list. The swatch means you can always tell which line you clicked. Values are monospace where they're identifiers.</p>
+</div>
+
+<div class="dv-opt" id="2g">
+<div class="dv-olabel"><a class="dv-oid" href="#2g">2g</a>Layers drawer (legend and toggles merged) and Data drawer</div>
+<div class="dv-card" style="width:660px;padding:20px;background:#efefef;display:flex;gap:16px;align-items:flex-start;font-size:14px">
+  <div style="width:305px;background:#fff;border:1px solid #dcd9d2;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.1)">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:11px 14px;border-bottom:1px solid #e7e4de"><b style="font-size:14.5px">Layers</b><span style="color:#85837c;cursor:pointer">✕</span></div>
+    <div style="padding:8px 6px 10px">
+      <div style="font:600 11px/1 system-ui;letter-spacing:.09em;text-transform:uppercase;color:#85837c;padding:8px 8px 6px">Cart paths</div>
+      <div style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:5px;background:#f4f3f0"><span style="width:15px;height:15px;border-radius:4px;background:#1b1a18;color:#fff;font:700 10px/15px system-ui;text-align:center;flex:none">✓</span><span style="width:24px;border-top:5px solid #ff3b1f;flex:none"></span>Not run</div>
+      <div style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:5px"><span style="width:15px;height:15px;border-radius:4px;background:#1b1a18;color:#fff;font:700 10px/15px system-ui;text-align:center;flex:none">✓</span><span style="width:24px;border-top:2.5px solid #34332f;flex:none"></span>Run, incomplete</div>
+      <div style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:5px"><span style="width:15px;height:15px;border-radius:4px;background:#1b1a18;color:#fff;font:700 10px/15px system-ui;text-align:center;flex:none">✓</span><span style="width:24px;border-top:2px solid #6b6862;flex:none"></span>Complete</div>
+      <div style="font:600 11px/1 system-ui;letter-spacing:.09em;text-transform:uppercase;color:#85837c;padding:12px 8px 6px">Roads</div>
+      <div style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:5px"><span style="width:15px;height:15px;border-radius:4px;background:#1b1a18;color:#fff;font:700 10px/15px system-ui;text-align:center;flex:none">✓</span><span style="width:24px;border-top:3px solid #ffb01f;flex:none"></span>Not covered</div>
+      <div style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:5px"><span style="width:15px;height:15px;border-radius:4px;background:#1b1a18;color:#fff;font:700 10px/15px system-ui;text-align:center;flex:none">✓</span><span style="width:24px;border-top:1.5px solid #c4c1ba;flex:none"></span>Covered</div>
+      <div style="font:600 11px/1 system-ui;letter-spacing:.09em;text-transform:uppercase;color:#85837c;padding:12px 8px 6px">Nodes <span style="text-transform:none;letter-spacing:0;font-weight:400">· from zoom 15</span></div>
+      <div style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:5px"><span style="width:15px;height:15px;border-radius:4px;background:#1b1a18;color:#fff;font:700 10px/15px system-ui;text-align:center;flex:none">✓</span><span style="width:24px;display:flex;justify-content:center;flex:none"><span style="width:9px;height:9px;border-radius:50%;background:#fff;border:1.5px solid #2b2a27"></span></span>Missed, cart path</div>
+      <div style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:5px"><span style="width:15px;height:15px;border-radius:4px;background:#1b1a18;color:#fff;font:700 10px/15px system-ui;text-align:center;flex:none">✓</span><span style="width:24px;display:flex;justify-content:center;flex:none"><span style="width:8px;height:8px;border-radius:50%;background:#ffb01f;border:1.5px solid #2b2a27"></span></span>Missed, road</div>
+      <div style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:5px;color:#85837c"><span style="width:15px;height:15px;border-radius:4px;border:1.5px solid #c9c6bf;background:#fff;flex:none"></span><span style="width:24px;display:flex;justify-content:center;flex:none"><span style="width:6px;height:6px;border-radius:50%;background:#333"></span></span>Hit</div>
+      <div style="font:600 11px/1 system-ui;letter-spacing:.09em;text-transform:uppercase;color:#85837c;padding:12px 8px 6px">Extra</div>
+      <div style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:5px;color:#85837c"><span style="width:15px;height:15px;border-radius:4px;border:1.5px solid #c9c6bf;background:#fff;flex:none"></span><span style="width:24px;border-top:2px solid #e6550d;opacity:.6;flex:none"></span>Run tracks</div>
+      <div style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:5px;color:#85837c"><span style="width:15px;height:15px;border-radius:4px;border:1.5px solid #c9c6bf;background:#fff;flex:none"></span><span style="width:24px;border-top:4px dashed #111;flex:none"></span>Graph islands</div>
+      <div style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:5px;color:#85837c"><span style="width:15px;height:15px;border-radius:4px;border:1.5px solid #c9c6bf;background:#fff;flex:none"></span><span style="width:24px;border-top:8px solid #9fd8ff;flex:none"></span>Latest city changes</div>
+      <div style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:5px;color:#85837c"><span style="width:15px;height:15px;border-radius:4px;background:#1b1a18;color:#fff;font:700 10px/15px system-ui;text-align:center;flex:none">✓</span><span style="width:24px;border-top:2.5px dashed #9a978f;flex:none"></span>Excluded &amp; not counted</div>
+    </div>
+  </div>
+  <div style="width:305px;background:#fff;border:1px solid #dcd9d2;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.1)">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:11px 14px;border-bottom:1px solid #e7e4de"><b style="font-size:14.5px">Data</b><span style="color:#85837c;cursor:pointer">✕</span></div>
+    <div style="padding:12px 14px">
+      <form style="display:flex;gap:6px;margin-bottom:14px"><input placeholder="Cart path OBJECTID_1" style="flex:1;min-width:0;font:14px system-ui;padding:8px 10px;border:1px solid #c9c6bf;border-radius:6px"><button style="font:600 14px system-ui;padding:8px 14px;border:1px solid #1b1a18;background:#fff;border-radius:6px;cursor:pointer">Find</button></form>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <tr style="color:#85837c;font-size:11px;letter-spacing:.07em;text-transform:uppercase"><th style="text-align:left;padding:0 0 6px;font-weight:600"></th><th style="text-align:right;padding:0 0 6px;font-weight:600">Counted</th><th style="text-align:right;padding:0 0 6px;font-weight:600">Miles</th><th style="text-align:right;padding:0 0 6px;font-weight:600">Nodes</th></tr>
+        <tr style="border-top:1px solid #e7e4de"><td style="padding:7px 0">Cart paths</td><td style="text-align:right;font-variant-numeric:tabular-nums">780</td><td style="text-align:right;font-variant-numeric:tabular-nums">103.56</td><td style="text-align:right;font-variant-numeric:tabular-nums">9,824</td></tr>
+        <tr style="border-top:1px solid #e7e4de"><td style="padding:7px 0">Roads</td><td style="text-align:right;font-variant-numeric:tabular-nums">2,392</td><td style="text-align:right;font-variant-numeric:tabular-nums">248.47</td><td style="text-align:right;font-variant-numeric:tabular-nums">23,630</td></tr>
+      </table>
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid #e7e4de;font-size:13px;color:#5c5a54">329 runs in the city · latest Sep 12, 2026</div>
+      <div style="margin-top:10px;font-size:13px;color:#5c5a54">Last sync Sep 12, 1:51 PM<br>1 new city run · 375 nodes newly hit</div>
+      <button style="margin-top:10px;width:100%;font:600 14px system-ui;padding:9px;border:1px solid #1b1a18;background:#fff;border-radius:6px;cursor:pointer">Sync now</button>
+      <a href="#2g" style="display:inline-block;margin-top:12px;font-size:13.5px;font-weight:600">Data status page →</a>
+    </div>
+  </div>
+</div>
+<p class="dv-notes"><b>One list instead of two.</b> Each row is a toggle, a swatch and a number, so the legend and the layer control are the same object; unchecked rows go gray. The miles per row are the same figures the bar shows, split — that's new content, tell me if the API can't supply it and I'll drop the column.</p>
+</div>
+
+<div class="dv-opt" id="2h">
+<div class="dv-olabel"><a class="dv-oid" href="#2h">2h</a>Phone — 390px, glance at the map and the number</div>
+<div class="dv-card" style="width:390px">
+  <div style="height:660px;display:flex;flex-direction:column;font-size:14px">
+    <div style="flex:none;padding:10px 14px;background:#fff;border-bottom:1px solid #dcd9d2">
+      <div style="display:flex;align-items:center;justify-content:space-between"><span style="font:700 12px/1 system-ui;letter-spacing:.11em;text-transform:uppercase">Run PTC</span><a href="#2h" style="font-size:13px;color:#5c5a54;text-decoration:none">Status</a></div>
+      <div style="display:flex;align-items:baseline;gap:8px;margin-top:8px"><b style="font:700 26px/1 system-ui;letter-spacing:-.02em">50.9%</b><span style="font-size:12.5px;color:#5c5a54">52.7 / 103.6 mi</span></div>
+      <div style="height:6px;background:#e7e4de;border-radius:3px;margin-top:8px;overflow:hidden"><div style="width:50.9%;height:100%;background:#34332f"></div></div>
+      <div style="display:flex;align-items:baseline;gap:8px;margin-top:8px;font-size:12.5px;color:#85837c"><b style="font-weight:600;color:#5c5a54">Roads 33.8%</b> 84.0 / 248.5 mi</div>
+    </div>
+    <div style="flex:1;position:relative;background:#efefef">
+      <svg viewBox="0 0 390 470" style="position:absolute;inset:0;width:100%;height:100%"><g fill="none" stroke-linecap="round"><path d="M20 400 L110 370 L200 385 L290 335 L375 345" stroke="#ffb01f" stroke-width="3"/><path d="M30 110 L120 130 L230 95 L340 125" stroke="#c4c1ba" stroke-width="1.5"/><path d="M60 430 L80 280 L170 215 L260 200" stroke="#ff3b1f" stroke-width="5"/><path d="M260 200 L330 175" stroke="#6b6862" stroke-width="2"/><path d="M170 215 L210 150 L230 95" stroke="#34332f" stroke-width="2.5"/></g></svg>
+      <div style="position:absolute;left:12px;bottom:12px;right:12px;display:flex;gap:8px">
+        <button style="flex:1;font:600 14px system-ui;padding:12px;border:1px solid #1b1a18;background:#1b1a18;color:#fff;border-radius:8px;cursor:pointer">Plan a route</button>
+        <button style="flex:none;font:500 14px system-ui;padding:12px 14px;border:1px solid #dcd9d2;background:#fff;border-radius:8px;cursor:pointer">Layers</button>
+      </div>
+      <div style="position:absolute;right:10px;top:10px;background:rgba(255,255,255,.88);border-radius:4px;padding:3px 6px;font-size:10.5px;color:#5c5a54">© OSM</div>
+    </div>
+  </div>
+</div>
+<p class="dv-notes">Bar stacks to two rows and keeps both percentages; drawers become full-width sheets from the bottom; route tools, if opened on a phone, become a two-row dock (distance + Undo/Clear/Export) with the elevation strip collapsed by default. Buttons are 44px tall.</p>
+</div>
+
+<div class="dv-opt" id="2i">
+<div class="dv-olabel"><a class="dv-oid" href="#2i">2i</a>Status page — everything current</div>
+<div class="dv-card" style="width:900px">
+  <div style="background:#f4f3f0;font-size:14px">
+    <div style="display:flex;align-items:center;gap:16px;padding:14px 24px;background:#fff;border-bottom:1px solid #dcd9d2">
+      <span style="font:700 13px/1 system-ui;letter-spacing:.11em;text-transform:uppercase">Run PTC</span>
+      <span style="font:600 16px/1 system-ui">Data status</span>
+      <span style="flex:1"></span>
+      <span style="font-size:12.5px;color:#85837c">Updated Sep 12, 2026, 6:02 PM</span>
+      <a href="#2i" style="font-size:13.5px;font-weight:600">← Map</a>
+    </div>
+    <div style="padding:20px 24px;display:flex;flex-direction:column;gap:16px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div style="background:#fff;border:1px solid #dcd9d2;border-radius:8px;padding:16px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px"><b style="font-size:15px">Intervals sync</b><span style="display:inline-flex;align-items:center;gap:6px;font:600 12px system-ui;padding:3px 10px;border-radius:999px;background:#e4f3ec;color:#0d5c40;border:1px solid #9cd0ba"><span aria-hidden="true">✓</span>Current</span><span style="flex:1"></span><button style="font:600 13px system-ui;padding:6px 12px;border:1px solid #1b1a18;background:#fff;border-radius:6px;cursor:pointer">Sync now</button></div>
+          <dl style="margin:0;display:grid;grid-template-columns:max-content 1fr;gap:6px 14px;font-size:13px">
+            <dt style="color:#85837c">Last success</dt><dd style="margin:0">Sep 12, 1:51 PM · 1 new city run, 375 nodes newly hit</dd>
+            <dt style="color:#85837c">Last attempt</dt><dd style="margin:0">Sep 12, 1:51 PM · sync (manual) · ok</dd>
+            <dt style="color:#85837c">Runs</dt><dd style="margin:0">329 in the city, 118 outside it, 4 without GPS</dd>
+            <dt style="color:#85837c">Latest run</dt><dd style="margin:0">Sep 12, 2026</dd>
+          </dl>
+        </div>
+        <div style="background:#fff;border:1px solid #dcd9d2;border-radius:8px;padding:16px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px"><b style="font-size:15px">City data</b><span style="display:inline-flex;align-items:center;gap:6px;font:600 12px system-ui;padding:3px 10px;border-radius:999px;background:#e4f3ec;color:#0d5c40;border:1px solid #9cd0ba"><span aria-hidden="true">✓</span>Current</span><span style="flex:1"></span><button style="font:600 13px system-ui;padding:6px 12px;border:1px solid #1b1a18;background:#fff;border-radius:6px;cursor:pointer">Check city now</button></div>
+          <dl style="margin:0;display:grid;grid-template-columns:max-content 1fr;gap:6px 14px;font-size:13px">
+            <dt style="color:#85837c">Last success</dt><dd style="margin:0">Sep 12, 3:02 AM · no changes</dd>
+            <dt style="color:#85837c">Last attempt</dt><dd style="margin:0">Sep 12, 3:02 AM · refresh (nightly) · ok</dd>
+          </dl>
+        </div>
+      </div>
+      <div style="background:#fff;border:1px solid #dcd9d2;border-radius:8px;padding:16px">
+        <b style="font-size:15px;display:block;margin-bottom:12px">City layers</b>
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <tr style="color:#85837c;font-size:11px;letter-spacing:.07em;text-transform:uppercase"><th style="text-align:left;font-weight:600;padding-bottom:7px">Layer</th><th style="text-align:right;font-weight:600;padding-bottom:7px">City features</th><th style="text-align:left;font-weight:600;padding-bottom:7px;padding-left:16px">City last edited</th><th style="text-align:left;font-weight:600;padding-bottom:7px">Last imported</th><th style="text-align:right;font-weight:600;padding-bottom:7px">Counted</th><th style="text-align:right;font-weight:600;padding-bottom:7px">Excluded</th></tr>
+          <tr style="border-top:1px solid #e7e4de"><td style="padding:8px 0">Cart paths</td><td style="text-align:right;font-variant-numeric:tabular-nums">812</td><td style="padding-left:16px">Aug 28, 2026</td><td>Sep 12, 3:02 AM</td><td style="text-align:right;font-variant-numeric:tabular-nums">780 (103.56 mi)</td><td style="text-align:right;font-variant-numeric:tabular-nums">32</td></tr>
+          <tr style="border-top:1px solid #e7e4de"><td style="padding:8px 0">Roads</td><td style="text-align:right;font-variant-numeric:tabular-nums">2,504</td><td style="padding-left:16px">Jul 19, 2026</td><td>Sep 12, 3:02 AM</td><td style="text-align:right;font-variant-numeric:tabular-nums">2,392 (248.47 mi)</td><td style="text-align:right;font-variant-numeric:tabular-nums">112</td></tr>
+        </table>
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid #e7e4de;font-size:13px">Latest city change, Aug 28, 2026: <b>6 added</b>, <b>3 changed</b> · <a href="#2i">Show on the map</a></div>
+        <div style="margin-top:8px;font-size:13px;color:#5c5a54;display:flex;align-items:center;gap:7px;cursor:pointer"><span style="color:#85837c">▸</span>Change report (refresh job 4182)</div>
+      </div>
+      <div style="background:#fff;border:1px solid #dcd9d2;border-radius:8px;padding:16px">
+        <b style="font-size:15px;display:block;margin-bottom:12px">Alerts</b>
+        <dl style="margin:0;display:grid;grid-template-columns:max-content 1fr;gap:6px 14px;font-size:13px">
+          <dt style="color:#85837c">Nightly script last ran</dt><dd style="margin:0">Sep 12, 3:00 AM</dd>
+          <dt style="color:#85837c">Last alert sent</dt><dd style="margin:0">none</dd>
+        </dl>
+        <div style="margin-top:12px;padding:10px 12px;background:#f4f3f0;border-radius:6px;font-size:13px;color:#5c5a54">No problems on record.</div>
+      </div>
+      <div style="background:#fff;border:1px solid #dcd9d2;border-radius:8px;padding:16px">
+        <b style="font-size:15px;display:block;margin-bottom:12px">Recent jobs</b>
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <tr style="color:#85837c;font-size:11px;letter-spacing:.07em;text-transform:uppercase"><th style="text-align:left;font-weight:600;padding-bottom:7px">Started</th><th style="text-align:left;font-weight:600;padding-bottom:7px">Job</th><th style="text-align:left;font-weight:600;padding-bottom:7px">Trigger</th><th style="text-align:right;font-weight:600;padding-bottom:7px">Took</th><th style="text-align:left;font-weight:600;padding-bottom:7px;padding-left:16px">Status</th><th style="text-align:left;font-weight:600;padding-bottom:7px">Result</th></tr>
+          <tr style="border-top:1px solid #e7e4de"><td style="padding:8px 0;white-space:nowrap">Sep 12, 1:51 PM</td><td>sync</td><td>manual</td><td style="text-align:right;font-variant-numeric:tabular-nums">8.4 s</td><td style="padding-left:16px"><span style="display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:#0d5c40"><span aria-hidden="true">✓</span>ok</span></td><td style="color:#5c5a54">1 new city run, 375 nodes newly hit</td></tr>
+          <tr style="border-top:1px solid #e7e4de"><td style="padding:8px 0;white-space:nowrap">Sep 12, 3:02 AM</td><td>refresh</td><td>nightly</td><td style="text-align:right;font-variant-numeric:tabular-nums">1 min 12 s</td><td style="padding-left:16px"><span style="display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:#0d5c40"><span aria-hidden="true">✓</span>ok</span></td><td style="color:#5c5a54"><span style="color:#85837c">▸</span> No city changes</td></tr>
+          <tr style="border-top:1px solid #e7e4de"><td style="padding:8px 0;white-space:nowrap">Sep 11, 3:02 AM</td><td>refresh</td><td>nightly</td><td style="text-align:right;font-variant-numeric:tabular-nums">1 min 4 s</td><td style="padding-left:16px"><span style="display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:#0d5c40"><span aria-hidden="true">✓</span>ok</span></td><td style="color:#5c5a54"><span style="color:#85837c">▸</span> No city changes</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+<p class="dv-notes">Two source cards side by side instead of stacked, so the health of both is one glance. Everything else keeps its order. Badge = icon + word + tint.</p>
+</div>
+
+<div class="dv-opt" id="2j">
+<div class="dv-olabel"><a class="dv-oid" href="#2j">2j</a>Status — Intervals failing, with an open alert episode</div>
+<div class="dv-card" style="width:640px;background:#f4f3f0;padding:20px;display:flex;flex-direction:column;gap:16px;font-size:14px">
+  <div style="background:#fff;border:1px solid #dcd9d2;border-left:4px solid #b3261e;border-radius:8px;padding:16px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px"><b style="font-size:15px">Intervals sync</b><span style="display:inline-flex;align-items:center;gap:6px;font:600 12px system-ui;padding:3px 10px;border-radius:999px;background:#fdeceb;color:#7a1911;border:1px solid #e39a94"><span aria-hidden="true">✕</span>Failing</span><span style="flex:1"></span><button style="font:600 13px system-ui;padding:6px 12px;border:1px solid #1b1a18;background:#fff;border-radius:6px;cursor:pointer">Sync now</button></div>
+    <dl style="margin:0;display:grid;grid-template-columns:max-content 1fr;gap:6px 14px;font-size:13px">
+      <dt style="color:#85837c">Last success</dt><dd style="margin:0">Sep 10, 1:51 PM · 2 new city runs, 812 nodes newly hit</dd>
+      <dt style="color:#85837c">Last attempt</dt><dd style="margin:0">Sep 12, 5:36 PM · sync (nightly) · failed</dd>
+      <dt style="color:#85837c">Error</dt><dd style="margin:0"><code style="display:block;font-family:ui-monospace,Menlo,monospace;font-size:12px;background:#fdeceb;color:#7a1911;padding:8px 10px;border-radius:6px;overflow-wrap:anywhere;white-space:pre-wrap">HTTPStatusError: Client error '401 Unauthorized' for url 'https://intervals.icu/api/v1/athlete/i12345/activities'</code></dd>
+      <dt style="color:#85837c">What to do</dt><dd style="margin:0">Intervals rejected the credentials. Check <code style="font-family:ui-monospace,Menlo,monospace;font-size:12px;background:#f4f3f0;padding:1px 5px;border-radius:4px">INTERVALS_API_KEY</code> and <code style="font-family:ui-monospace,Menlo,monospace;font-size:12px;background:#f4f3f0;padding:1px 5px;border-radius:4px">INTERVALS_ATHLETE_ID</code> in the run-ptc container's settings.</dd>
+    </dl>
+    <div style="margin-top:12px;display:flex;gap:9px;align-items:flex-start;background:#fdeceb;border-radius:6px;padding:9px 11px;font-size:13px;color:#7a1911"><span aria-hidden="true">✕</span>Another job is already running (409).</div>
+  </div>
+  <div style="background:#fff;border:1px solid #dcd9d2;border-radius:8px;padding:16px">
+    <b style="font-size:15px;display:block;margin-bottom:12px">Alerts</b>
+    <dl style="margin:0;display:grid;grid-template-columns:max-content 1fr;gap:6px 14px;font-size:13px">
+      <dt style="color:#85837c">Nightly script last ran</dt><dd style="margin:0">Sep 12, 3:00 AM</dd>
+      <dt style="color:#85837c">Last alert sent</dt><dd style="margin:0">Sep 12, 5:37 PM</dd>
+    </dl>
+    <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:12px">
+      <tr style="color:#85837c;font-size:11px;letter-spacing:.07em;text-transform:uppercase"><th style="text-align:left;font-weight:600;padding-bottom:7px">Source</th><th style="text-align:left;font-weight:600;padding-bottom:7px">Problem</th><th style="text-align:left;font-weight:600;padding-bottom:7px">Since</th><th style="text-align:left;font-weight:600;padding-bottom:7px">Alert sent</th><th style="text-align:left;font-weight:600;padding-bottom:7px">Recovered</th></tr>
+      <tr style="border-top:1px solid #e7e4de"><td style="padding:8px 0;white-space:nowrap">Intervals sync</td><td style="padding-right:12px">Intervals rejected the credentials (401)</td><td style="white-space:nowrap">Sep 11, 3:02 AM</td><td style="white-space:nowrap">Sep 11, 3:03 AM</td><td><span style="display:inline-flex;align-items:center;gap:5px;color:#7a1911"><span aria-hidden="true">●</span>ongoing</span></td></tr>
+      <tr style="border-top:1px solid #e7e4de"><td style="padding:8px 0;white-space:nowrap">City data</td><td style="padding-right:12px">ArcGIS request timed out</td><td style="white-space:nowrap">Aug 30, 3:02 AM</td><td style="white-space:nowrap">Aug 30, 3:03 AM</td><td style="white-space:nowrap;color:#5c5a54">Aug 31, 3:04 AM</td></tr>
+    </table>
+  </div>
+</div>
+<p class="dv-notes">A failing card gets a red left edge so it's findable while scrolling. The full error keeps its URL and wraps inside a monospace block — no horizontal overflow anywhere. Button errors appear under the card's fields rather than replacing them.</p>
+</div>
+
+<div class="dv-opt" id="2k">
+<div class="dv-olabel"><a class="dv-oid" href="#2k">2k</a>Status — a job running (polling)</div>
+<div class="dv-card" style="width:640px;background:#f4f3f0;padding:20px;display:flex;flex-direction:column;gap:16px;font-size:14px">
+  <div style="background:#fff;border:1px solid #dcd9d2;border-left:4px solid #1c5cab;border-radius:8px;padding:16px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px"><b style="font-size:15px">City data</b><span style="display:inline-flex;align-items:center;gap:6px;font:600 12px system-ui;padding:3px 10px;border-radius:999px;background:#e7eef8;color:#123e73;border:1px solid #a8c0e0"><span aria-hidden="true">⟳</span>Running</span><span style="flex:1"></span><button style="font:600 13px system-ui;padding:6px 12px;border:1px solid #dcd9d2;background:#f4f3f0;color:#a5a29b;border-radius:6px">Check city now</button></div>
+    <div style="height:4px;background:#e7eef8;border-radius:2px;overflow:hidden;margin-bottom:12px"><div style="width:38%;height:100%;background:#1c5cab"></div></div>
+    <dl style="margin:0;display:grid;grid-template-columns:max-content 1fr;gap:6px 14px;font-size:13px">
+      <dt style="color:#85837c">Started</dt><dd style="margin:0">Sep 12, 6:01 PM · refresh (manual) · 47 s ago</dd>
+      <dt style="color:#85837c">Last success</dt><dd style="margin:0">Sep 12, 3:02 AM · no changes</dd>
+    </dl>
+  </div>
+  <div style="background:#fff;border:1px solid #dcd9d2;border-radius:8px;padding:16px">
+    <b style="font-size:15px;display:block;margin-bottom:12px">Recent jobs</b>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <tr style="color:#85837c;font-size:11px;letter-spacing:.07em;text-transform:uppercase"><th style="text-align:left;font-weight:600;padding-bottom:7px">Started</th><th style="text-align:left;font-weight:600;padding-bottom:7px">Job</th><th style="text-align:left;font-weight:600;padding-bottom:7px">Trigger</th><th style="text-align:right;font-weight:600;padding-bottom:7px">Took</th><th style="text-align:left;font-weight:600;padding-bottom:7px;padding-left:16px">Status</th><th style="text-align:left;font-weight:600;padding-bottom:7px">Result</th></tr>
+      <tr style="border-top:1px solid #e7e4de;background:#f7faff"><td style="padding:8px 0;white-space:nowrap">Sep 12, 6:01 PM</td><td>refresh</td><td>manual</td><td style="text-align:right;color:#85837c">—</td><td style="padding-left:16px"><span style="display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:#123e73"><span aria-hidden="true">⟳</span>running</span></td><td style="color:#85837c">…</td></tr>
+      <tr style="border-top:1px solid #e7e4de"><td style="padding:8px 0;white-space:nowrap">Sep 12, 5:36 PM</td><td>sync</td><td>nightly</td><td style="text-align:right;font-variant-numeric:tabular-nums">2.1 s</td><td style="padding-left:16px"><span style="display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:#7a1911"><span aria-hidden="true">✕</span>failed</span></td><td style="color:#7a1911"><span style="color:#b3261e">▸</span> HTTPStatusError: Client error '401 Unauthorized'</td></tr>
+      <tr style="border-top:1px solid #e7e4de"><td style="padding:8px 0;white-space:nowrap">Sep 12, 1:51 PM</td><td>sync</td><td>manual</td><td style="text-align:right;font-variant-numeric:tabular-nums">8.4 s</td><td style="padding-left:16px"><span style="display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:#0d5c40"><span aria-hidden="true">✓</span>ok</span></td><td style="color:#5c5a54">1 new city run, 375 nodes newly hit</td></tr>
+    </table>
+  </div>
+</div>
+<p class="dv-notes">Running state: blue edge, indeterminate bar, disabled button, and the live row tinted in the jobs table. The bar is a CSS animation, not progress — nothing reports percent.</p>
+</div>
+
+<div class="dv-opt" id="2n">
+<div class="dv-olabel"><a class="dv-oid" href="#2n">2n</a>Share page — “what I've done”</div>
+<div class="dv-card" style="width:760px">
+  <div style="height:470px;display:flex;flex-direction:column;background:#fff;font-size:14px">
+    <div style="flex:none;display:flex;align-items:flex-end;gap:22px;padding:18px 22px 16px;border-bottom:1px solid #dcd9d2">
+      <div><div style="font:700 12px/1 system-ui;letter-spacing:.11em;text-transform:uppercase;color:#85837c">Peachtree City</div><div style="font:700 20px/1.2 system-ui;letter-spacing:-.01em;margin-top:6px">Every cart path and road</div></div>
+      <span style="flex:1"></span>
+      <div style="text-align:right"><div style="font:700 38px/1 system-ui;letter-spacing:-.025em;color:#34332f">50.9%</div><div style="font-size:12.5px;color:#5c5a54;margin-top:5px">52.7 of 103.6 cart path mi</div></div>
+      <div style="text-align:right"><div style="font:700 26px/1 system-ui;letter-spacing:-.02em;color:#8b8983">33.8%</div><div style="font-size:12.5px;color:#5c5a54;margin-top:5px">84.0 of 248.5 road mi</div></div>
+    </div>
+    <div style="flex:1;position:relative;background:#efefef">
+      <svg viewBox="0 0 760 380" style="position:absolute;inset:0;width:100%;height:100%"><g fill="none" stroke-linecap="round"><path d="M50 320 L190 290 L330 305 L480 255 L710 265" stroke="#dad8d2" stroke-width="2"/><path d="M90 90 L230 110 L400 75 L640 105" stroke="#8b8983" stroke-width="2"/><path d="M120 340 L150 215 L270 165 L420 150" stroke="#dad8d2" stroke-width="2"/><path d="M420 150 L560 115 L715 140" stroke="#34332f" stroke-width="3.5"/><path d="M270 165 L340 110 L400 75" stroke="#34332f" stroke-width="3.5"/><path d="M480 255 L530 195 L560 115" stroke="#34332f" stroke-width="3.5"/><path d="M190 290 L230 110" stroke="#8b8983" stroke-width="2"/></g></svg>
+      <div style="position:absolute;left:22px;bottom:16px;display:flex;gap:16px;font-size:12.5px;color:#5c5a54"><span style="display:flex;align-items:center;gap:7px"><span style="width:22px;border-top:3.5px solid #34332f"></span>Run</span><span style="display:flex;align-items:center;gap:7px"><span style="width:22px;border-top:2px solid #dad8d2"></span>Not yet</span></div>
+      <div style="position:absolute;right:16px;bottom:16px;font-size:12px;color:#85837c">Latest run Sep 12, 2026 · © OpenStreetMap</div>
+    </div>
+  </div>
+</div>
+<p class="dv-notes">Done is the loud layer, everything else falls to near-basemap gray. No controls, no nodes, no layer list — safe to leave open in a tab or send to someone.</p>
+</div>
+
+<div class="dv-opt" id="2o">
+<div class="dv-olabel"><a class="dv-oid" href="#2o">2o</a>Share page — “what's left”</div>
+<div class="dv-card" style="width:760px">
+  <div style="height:470px;display:flex;flex-direction:column;background:#fff;font-size:14px">
+    <div style="flex:none;display:flex;align-items:flex-end;gap:22px;padding:18px 22px 16px;border-bottom:1px solid #dcd9d2">
+      <div><div style="font:700 12px/1 system-ui;letter-spacing:.11em;text-transform:uppercase;color:#85837c">Peachtree City</div><div style="font:700 20px/1.2 system-ui;letter-spacing:-.01em;margin-top:6px">What's still unrun</div></div>
+      <span style="flex:1"></span>
+      <div style="text-align:right"><div style="font:700 38px/1 system-ui;letter-spacing:-.025em;color:#ff3b1f">50.9</div><div style="font-size:12.5px;color:#5c5a54;margin-top:5px">cart path mi left of 103.6</div></div>
+      <div style="text-align:right"><div style="font:700 26px/1 system-ui;letter-spacing:-.02em;color:#5c5a54">164.5</div><div style="font-size:12.5px;color:#5c5a54;margin-top:5px">road mi left of 248.5</div></div>
+    </div>
+    <div style="flex:1;position:relative;background:#efefef">
+      <svg viewBox="0 0 760 380" style="position:absolute;inset:0;width:100%;height:100%"><g fill="none" stroke-linecap="round"><path d="M50 320 L190 290 L330 305 L480 255 L710 265" stroke="#8b8983" stroke-width="2.5"/><path d="M90 90 L230 110 L400 75 L640 105" stroke="#e6e4de" stroke-width="1.5"/><path d="M120 340 L150 215 L270 165 L420 150" stroke="#ff3b1f" stroke-width="4.5"/><path d="M420 150 L560 115 L715 140" stroke="#e6e4de" stroke-width="1.5"/><path d="M270 165 L340 110 L400 75" stroke="#e6e4de" stroke-width="1.5"/><path d="M480 255 L530 195 L560 115" stroke="#e6e4de" stroke-width="1.5"/><path d="M190 290 L230 110" stroke="#8b8983" stroke-width="2.5"/><path d="M330 305 L380 230 L420 150" stroke="#ff3b1f" stroke-width="4.5"/></g></svg>
+      <div style="position:absolute;left:22px;bottom:16px;display:flex;gap:16px;font-size:12.5px;color:#5c5a54"><span style="display:flex;align-items:center;gap:7px"><span style="width:22px;border-top:4.5px solid #ff3b1f"></span>Cart path left</span><span style="display:flex;align-items:center;gap:7px"><span style="width:22px;border-top:2.5px solid #8b8983"></span>Road left</span></div>
+      <div style="position:absolute;right:16px;bottom:16px;font-size:12px;color:#85837c">Latest run Sep 12, 2026 · © OpenStreetMap</div>
+    </div>
+  </div>
+</div>
+<p class="dv-notes">Same page, inverted: only the unfinished lines carry weight, finished ground is a ghost. Shipping as two pages off one template: <code>left.html</code> (this) and <code>progress.html</code> (<a class="dv-oid" href="#2n">2n</a>) — opposite sides of the same coin. Static: no nodes, no toggles, no popups, no route code.</p>
+</div>
+
+
+
+</div>
+<p class="dv-next">Next: "<a class="dv-oid" href="#2b">2b</a> palette on the <a class="dv-oid" href="#2c">2c</a> layout" · "route bar is too tall" · "share page: keep the <a class="dv-oid" href="#2n">done</a> one".</p>
+</section>
+
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">Map page — three layout directions</span></div>
+<p class="dv-sub">Sketch fidelity: real content and real proportions, provisional type and spacing. <a class="dv-oid" href="#1z">1z</a> is today's UI recreated from the repo for comparison. Pick one and I'll build the full deliverable set on it.</p>
+<div class="dv-opts">
+
+<div class="dv-opt" id="1a">
+<div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>Fixed left rail — everything docked, one scroll</div>
+<div class="dv-card" style="width:900px">
+  <div style="display:flex;height:560px">
+    <div style="width:296px;flex:none;border-right:1px solid #d9d7d1;background:#fafaf8;display:flex;flex-direction:column">
+      <div style="padding:12px 14px;border-bottom:2px solid #1a1a19;display:flex;align-items:baseline;justify-content:space-between">
+        <span style="font:700 15px/1 system-ui,sans-serif;letter-spacing:-.01em">Run PTC</span>
+        <a href="#1a" style="font-size:11.5px;color:#55534e;text-decoration:none">Status ↗</a>
+      </div>
+      <div style="padding:14px;border-bottom:1px solid #e4e2dc">
+        <div style="font:600 10.5px/1 system-ui,sans-serif;letter-spacing:.09em;text-transform:uppercase;color:#77756e;margin-bottom:8px">Cart path completion</div>
+        <div style="display:flex;align-items:baseline;gap:6px"><span style="font:700 30px/1 system-ui,sans-serif;letter-spacing:-.02em">50.9</span><span style="font:600 15px/1 system-ui,sans-serif;color:#55534e">%</span></div>
+        <div style="height:7px;background:#e4e2dc;margin:10px 0 8px"><div style="width:50.9%;height:100%;background:#199e70"></div></div>
+        <div style="font-size:12px;color:#55534e">52.68 of 103.56 mi · 327 of 780 segments</div>
+        <div style="font-size:12px;color:#55534e;margin-top:2px">Roads 83.95 of 248.47 mi</div>
+      </div>
+      <div style="padding:12px 14px;border-bottom:1px solid #e4e2dc;display:flex;gap:10px;align-items:flex-start">
+        <div style="flex:1;font-size:11.5px;color:#55534e">Last sync Sep 12, 1:51 PM<br>1 new city run · 375 nodes newly hit</div>
+        <button style="flex:none;font:600 11.5px system-ui,sans-serif;padding:5px 9px;border:1px solid #1a1a19;background:#fff;color:#1a1a19;border-radius:0">Sync</button>
+      </div>
+      <div style="padding:12px 14px;border-bottom:1px solid #e4e2dc">
+        <button style="width:100%;font:600 13px system-ui,sans-serif;padding:9px;border:1px solid #1a1a19;background:#1a1a19;color:#fff;border-radius:0;text-align:left">Plan a route</button>
+      </div>
+      <div style="padding:12px 14px 4px;flex:1;overflow:hidden">
+        <div style="font:600 10.5px/1 system-ui,sans-serif;letter-spacing:.09em;text-transform:uppercase;color:#77756e;margin-bottom:9px">Layers &amp; legend</div>
+        <div style="display:flex;flex-direction:column;gap:7px;font-size:12px">
+          <div style="display:flex;align-items:center;gap:8px"><span style="width:11px;height:11px;border:1.5px solid #1a1a19;background:#1a1a19;flex:none"></span><span style="width:20px;border-top:2.5px solid #199e70"></span>Complete cart path</div>
+          <div style="display:flex;align-items:center;gap:8px"><span style="width:11px;height:11px;border:1.5px solid #1a1a19;background:#1a1a19;flex:none"></span><span style="width:20px;border-top:2.5px solid #1c5cab"></span>Run, segment incomplete</div>
+          <div style="display:flex;align-items:center;gap:8px"><span style="width:11px;height:11px;border:1.5px solid #1a1a19;background:#1a1a19;flex:none"></span><span style="width:20px;border-top:4px solid #d95926"></span>Not run</div>
+          <div style="display:flex;align-items:center;gap:8px"><span style="width:11px;height:11px;border:1.5px solid #1a1a19;background:#1a1a19;flex:none"></span><span style="width:20px;border-top:1.5px solid #5598e7"></span>Road run</div>
+          <div style="display:flex;align-items:center;gap:8px"><span style="width:11px;height:11px;border:1.5px solid #1a1a19;background:#1a1a19;flex:none"></span><span style="width:20px;border-top:3px solid #8f8e89"></span>Road not run</div>
+          <div style="display:flex;align-items:center;gap:8px;color:#77756e"><span style="width:11px;height:11px;border:1.5px solid #b6b4ad;background:#fff;flex:none"></span><span style="width:11px;height:11px;border-radius:50%;background:#ffd84d;border:1.5px solid #3a3936;flex:none"></span>Missed road nodes</div>
+          <div style="display:flex;align-items:center;gap:8px;color:#77756e"><span style="width:11px;height:11px;border:1.5px solid #b6b4ad;background:#fff;flex:none"></span><span style="width:20px;border-top:8px solid #9fd8ff"></span>Latest city changes</div>
+        </div>
+      </div>
+      <div style="padding:10px 14px;border-top:1px solid #e4e2dc;display:flex;gap:6px">
+        <input placeholder="Cart path OBJECTID_1" style="flex:1;min-width:0;font:12px system-ui,sans-serif;padding:6px 8px;border:1px solid #c9c7c0;border-radius:0;background:#fff">
+        <button style="font:600 12px system-ui,sans-serif;padding:6px 10px;border:1px solid #1a1a19;background:#fff;border-radius:0">Find</button>
+      </div>
+    </div>
+    <div style="flex:1;position:relative;background:#efefef">
+      <svg viewBox="0 0 604 560" style="position:absolute;inset:0;width:100%;height:100%"><g fill="none" stroke-linecap="round"><path d="M40 480 L150 430 L250 450 L360 390 L520 400" stroke="#8f8e89" stroke-width="3"/><path d="M60 120 L180 140 L300 90 L470 130" stroke="#5598e7" stroke-width="1.5"/><path d="M100 500 L120 330 L210 250 L330 230" stroke="#d95926" stroke-width="4"/><path d="M330 230 L430 180 L540 210" stroke="#199e70" stroke-width="2.5"/><path d="M210 250 L260 160 L300 90" stroke="#1c5cab" stroke-width="2.5"/><path d="M120 330 L40 300" stroke="#cac9c4" stroke-width="1.5"/><path d="M430 180 L460 300 L520 400" stroke="#5f5e5a" stroke-width="2.5" stroke-dasharray="4 6"/></g></svg>
+      <div style="position:absolute;left:10px;top:10px;width:26px;height:52px;background:#fff;border:1px solid #b6b4ad;font:400 15px/25px system-ui;text-align:center;color:#55534e">+<div style="border-top:1px solid #d9d7d1">−</div></div>
+      <div style="position:absolute;right:10px;bottom:10px;background:rgba(255,255,255,.9);border:1px solid #c9c7c0;padding:3px 6px;font-size:10.5px;color:#55534e">© OpenStreetMap contributors</div>
+    </div>
+  </div>
+</div>
+<p class="dv-notes"><b>Rail never floats over the map.</b> Legend rows are the layer toggles — one checkbox, one swatch, one label; unchecked rows go gray. Planning replaces the rail's middle with route tools. Phone: rail becomes a bottom sheet, collapsed to the completion line.</p>
+</div>
+
+<div class="dv-opt" id="1b">
+<div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>Top bar + collapsible drawers — map is the page</div>
+<div class="dv-card" style="width:900px">
+  <div style="height:560px;display:flex;flex-direction:column">
+    <div style="flex:none;display:flex;align-items:center;gap:18px;padding:0 14px;height:46px;background:#fff;border-bottom:2px solid #1a1a19">
+      <span style="font:700 14px/1 system-ui,sans-serif">Run PTC</span>
+      <span style="display:flex;align-items:baseline;gap:7px"><b style="font:700 17px/1 system-ui,sans-serif">50.9%</b><span style="font-size:11.5px;color:#55534e">52.7 / 103.6 cart path mi · 327 / 780 segments</span></span>
+      <span style="width:110px;height:6px;background:#e4e2dc"><span style="display:block;width:50.9%;height:100%;background:#199e70"></span></span>
+      <span style="flex:1"></span>
+      <button style="font:600 12px system-ui;padding:6px 10px;border:1px solid #1a1a19;background:#1a1a19;color:#fff;border-radius:0">Plan a route</button>
+      <button style="font:600 12px system-ui;padding:6px 10px;border:1px solid #c9c7c0;background:#fff;border-radius:0">Layers ▾</button>
+      <a href="#1b" style="font-size:12px;color:#55534e;text-decoration:none">Status</a>
+    </div>
+    <div style="flex:1;position:relative;background:#efefef">
+      <svg viewBox="0 0 900 514" style="position:absolute;inset:0;width:100%;height:100%"><g fill="none" stroke-linecap="round"><path d="M60 440 L220 400 L380 420 L560 360 L820 370" stroke="#8f8e89" stroke-width="3"/><path d="M90 110 L260 130 L450 80 L730 120" stroke="#5598e7" stroke-width="1.5"/><path d="M150 460 L180 300 L320 230 L500 210" stroke="#d95926" stroke-width="4"/><path d="M500 210 L650 160 L840 190" stroke="#199e70" stroke-width="2.5"/><path d="M320 230 L400 150 L450 80" stroke="#1c5cab" stroke-width="2.5"/><path d="M650 160 L700 280 L820 370" stroke="#5f5e5a" stroke-width="2.5" stroke-dasharray="4 6"/></g></svg>
+      <div style="position:absolute;right:14px;top:14px;width:260px;background:#fff;border:1px solid #c9c7c0;box-shadow:0 2px 10px rgba(0,0,0,.14)">
+        <div style="padding:9px 12px;border-bottom:1px solid #e4e2dc;font:600 11px/1 system-ui;letter-spacing:.08em;text-transform:uppercase;color:#77756e;display:flex;justify-content:space-between">Layers &amp; legend<span>×</span></div>
+        <div style="padding:10px 12px;display:flex;flex-direction:column;gap:7px;font-size:12px">
+          <div style="display:flex;align-items:center;gap:8px"><span style="width:11px;height:11px;border:1.5px solid #1a1a19;background:#1a1a19;flex:none"></span><span style="width:20px;border-top:2.5px solid #199e70"></span>Complete cart path</div>
+          <div style="display:flex;align-items:center;gap:8px"><span style="width:11px;height:11px;border:1.5px solid #1a1a19;background:#1a1a19;flex:none"></span><span style="width:20px;border-top:4px solid #d95926"></span>Not run</div>
+          <div style="display:flex;align-items:center;gap:8px"><span style="width:11px;height:11px;border:1.5px solid #1a1a19;background:#1a1a19;flex:none"></span><span style="width:20px;border-top:3px solid #8f8e89"></span>Road not run</div>
+          <div style="display:flex;align-items:center;gap:8px;color:#77756e"><span style="width:11px;height:11px;border:1.5px solid #b6b4ad;background:#fff;flex:none"></span>Run tracks</div>
+          <div style="display:flex;align-items:center;gap:8px;color:#77756e"><span style="width:11px;height:11px;border:1.5px solid #b6b4ad;background:#fff;flex:none"></span>Graph islands</div>
+        </div>
+      </div>
+      <div style="position:absolute;left:14px;bottom:14px;background:#fff;border:1px solid #c9c7c0;padding:8px 12px;display:flex;gap:10px;align-items:center;box-shadow:0 2px 10px rgba(0,0,0,.14)">
+        <span style="font-size:11.5px;color:#55534e">Last sync Sep 12, 1:51 PM · 375 nodes newly hit</span>
+        <button style="font:600 11.5px system-ui;padding:5px 9px;border:1px solid #1a1a19;background:#fff;border-radius:0">Sync now</button>
+      </div>
+      <div style="position:absolute;left:14px;top:14px;width:26px;height:52px;background:#fff;border:1px solid #b6b4ad;font:400 15px/25px system-ui;text-align:center;color:#55534e">+<div style="border-top:1px solid #d9d7d1">−</div></div>
+      <div style="position:absolute;right:14px;bottom:14px;background:rgba(255,255,255,.9);border:1px solid #c9c7c0;padding:3px 6px;font-size:10.5px;color:#55534e">© OpenStreetMap contributors</div>
+    </div>
+  </div>
+</div>
+<p class="dv-notes"><b>Maximum map.</b> The numbers that matter live in a persistent bar; everything else is a drawer opened from it, one at a time, so nothing can stack and overflow. Stats table and Find move into a "Data" drawer. Phone: bar wraps to two lines, drawers become full-width sheets.</p>
+</div>
+
+<div class="dv-opt" id="1c">
+<div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>Sectioned rail with modes — planning takes over the rail</div>
+<div class="dv-card" style="width:900px">
+  <div style="display:flex;height:560px">
+    <div style="width:300px;flex:none;border-right:2px solid #1a1a19;background:#fff;display:flex;flex-direction:column">
+      <div style="padding:11px 14px;display:flex;align-items:baseline;justify-content:space-between;border-bottom:1px solid #e4e2dc">
+        <span style="font:700 14px/1 system-ui">Run PTC</span><a href="#1c" style="font-size:11.5px;color:#55534e;text-decoration:none">Status</a>
+      </div>
+      <div style="display:flex;border-bottom:1px solid #e4e2dc;font:600 12px system-ui">
+        <div style="flex:1;padding:9px 0;text-align:center;color:#77756e">Coverage</div>
+        <div style="flex:1;padding:9px 0;text-align:center;border-bottom:2px solid #e87ba4;color:#1a1a19;margin-bottom:-1px">Plan</div>
+        <div style="flex:1;padding:9px 0;text-align:center;color:#77756e">Layers</div>
+      </div>
+      <div style="padding:12px 14px;background:#fdeef4;border-bottom:1px solid #f0c9db">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <span style="font:600 11px/1 system-ui;letter-spacing:.08em;text-transform:uppercase;color:#8a4a68">Planning mode</span>
+          <button style="font:600 11.5px system-ui;padding:4px 8px;border:1px solid #b8527a;background:#fff;color:#8a4a68;border-radius:0">Done</button>
+        </div>
+        <div style="font:700 30px/1.1 system-ui;letter-spacing:-.02em;margin-top:8px">4.82 <span style="font:600 15px/1 system-ui;color:#55534e">mi</span></div>
+      </div>
+      <div style="padding:12px 14px;border-bottom:1px solid #e4e2dc">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <button style="font:600 12px system-ui;padding:7px 9px;border:1px solid #c9c7c0;background:#fff;border-radius:0;text-align:left">Undo</button>
+          <button style="font:600 12px system-ui;padding:7px 9px;border:1px solid #e4e2dc;background:#f6f5f2;color:#a9a7a0;border-radius:0;text-align:left">Redo</button>
+          <button style="font:600 12px system-ui;padding:7px 9px;border:1px solid #c9c7c0;background:#fff;border-radius:0;text-align:left">Retrace to start</button>
+          <button style="font:600 12px system-ui;padding:7px 9px;border:1px solid #c9c7c0;background:#fff;border-radius:0;text-align:left">Clear</button>
+          <button style="grid-column:1/-1;font:600 12px system-ui;padding:7px 9px;border:1px solid #1a1a19;background:#1a1a19;color:#fff;border-radius:0;text-align:left">Export GPX</button>
+        </div>
+        <div style="font-size:11.5px;color:#77756e;margin-top:9px">Click to add a waypoint; drag to reroute. Shift-click the route to retrace to that point.</div>
+      </div>
+      <div style="padding:12px 14px;flex:1">
+        <div style="font:600 10.5px/1 system-ui;letter-spacing:.09em;text-transform:uppercase;color:#77756e;margin-bottom:8px">Coverage</div>
+        <div style="display:flex;align-items:baseline;gap:8px"><b style="font:700 19px/1 system-ui">50.9%</b><span style="font-size:12px;color:#55534e">52.7 / 103.6 mi</span></div>
+        <div style="height:6px;background:#e4e2dc;margin-top:9px"><div style="width:50.9%;height:100%;background:#199e70"></div></div>
+      </div>
+    </div>
+    <div style="flex:1;position:relative;background:#efefef">
+      <svg viewBox="0 0 598 560" style="position:absolute;inset:0;width:100%;height:100%"><g fill="none" stroke-linecap="round"><path d="M40 470 L150 430 L250 450 L360 390 L520 400" stroke="#8f8e89" stroke-width="3"/><path d="M60 120 L180 140 L300 90 L470 130" stroke="#5598e7" stroke-width="1.5"/><path d="M100 500 L120 330 L210 250 L330 230" stroke="#d95926" stroke-width="4"/><path d="M330 230 L430 180 L540 210" stroke="#199e70" stroke-width="2.5"/><path d="M210 250 L260 160 L300 90" stroke="#1c5cab" stroke-width="2.5"/><path d="M120 330 L210 250 L330 230 L430 180" stroke="#fff" stroke-width="9"/><path d="M120 330 L210 250 L330 230 L430 180" stroke="#e87ba4" stroke-width="5"/></g><circle cx="120" cy="330" r="6" fill="#1a1a19" stroke="#fff" stroke-width="3"/><circle cx="330" cy="230" r="6" fill="#fff" stroke="#e87ba4" stroke-width="3"/><circle cx="430" cy="180" r="6" fill="#e87ba4" stroke="#fff" stroke-width="3"/></svg>
+      <div style="position:absolute;inset:0;border:3px solid #e87ba4;pointer-events:none"></div>
+      <div style="position:absolute;left:50%;transform:translateX(-50%);top:12px;background:#1a1a19;color:#fff;padding:5px 12px;font:600 11.5px system-ui">Planning · click a path or road to add a waypoint · Esc to exit</div>
+      <div style="position:absolute;left:12px;top:56px;width:26px;height:52px;background:#fff;border:1px solid #b6b4ad;font:400 15px/25px system-ui;text-align:center;color:#55534e">+<div style="border-top:1px solid #d9d7d1">−</div></div>
+      <div style="position:absolute;right:10px;bottom:10px;background:rgba(255,255,255,.9);border:1px solid #c9c7c0;padding:3px 6px;font-size:10.5px;color:#55534e">© OpenStreetMap contributors</div>
+    </div>
+  </div>
+</div>
+<p class="dv-notes"><b>One rail, three sections</b> (Coverage / Plan / Layers) so the panel has a fixed height and can never grow past the viewport. Planning is a real mode: rail switches to the route console, the map gets a magenta edge and a mode strip, popups stay suppressed. Phone: sections become a bottom tab bar.</p>
+</div>
+
+<div class="dv-opt" id="1z">
+<div class="dv-olabel"><a class="dv-oid" href="#1z">1z</a>Today — recreated from app/static (reference, not a proposal)</div>
+<div class="dv-card" style="width:900px">
+  <div style="height:560px;position:relative;background:#efefef;font:13px/1.4 system-ui,sans-serif">
+    <svg viewBox="0 0 900 560" style="position:absolute;inset:0;width:100%;height:100%"><g fill="none" stroke-linecap="round"><path d="M60 480 L220 430 L380 450 L560 390 L820 400" stroke="#8f8e89" stroke-width="3"/><path d="M90 140 L260 160 L450 110 L730 150" stroke="#5598e7" stroke-width="1.5"/><path d="M150 500 L180 330 L320 260 L500 240" stroke="#d95926" stroke-width="4"/><path d="M500 240 L650 190 L840 220" stroke="#199e70" stroke-width="2.5"/><path d="M320 260 L400 180 L450 110" stroke="#1c5cab" stroke-width="2.5"/></g></svg>
+    <div style="position:absolute;top:10px;left:50px;right:350px;max-width:640px;background:#fde7e5;border:1px solid #b3261e;color:#6b150f;padding:6px 10px;border-radius:6px;box-shadow:0 1px 5px rgba(0,0,0,.35)">
+      <div><span style="display:inline-block;width:1.2em;font-weight:700">✕</span>Intervals sync failing: HTTPStatusError: Client error '401 Unauthorized' (Sep 12, 2026, 5:36 PM)</div><a href="#1z" style="color:inherit;font-weight:600">Status page</a>
+    </div>
+    <div style="position:absolute;top:10px;right:10px;width:296px;background:#fff;padding:10px 12px;border-radius:6px;box-shadow:0 1px 5px rgba(0,0,0,.35)">
+      <h1 style="font-size:15px;margin:0 0 6px;display:flex;justify-content:space-between;align-items:baseline">Run PTC <a href="#1z" style="font-size:12px;font-weight:400">Status</a></h1>
+      <div style="margin-bottom:8px"><div style="font-size:14px;font-weight:600">52.7 of 103.6 cart path mi <span style="color:#127a56;margin-left:4px">50.9%</span></div><div>327 of 780 segments complete</div><div>84.0 of 248.5 road mi covered</div></div>
+      <div style="display:flex;gap:8px;align-items:flex-start;justify-content:space-between;margin-bottom:8px;padding:6px 0;border-top:1px solid #eee;border-bottom:1px solid #eee"><div style="color:#52514e">Last sync: Sep 12, 2026, 1:51 PM · 1 new city run, 375 nodes newly hit</div><button style="flex:none;font:13px system-ui">Sync now</button></div>
+      <div style="margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #eee"><div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-bottom:4px"><button style="font:13px system-ui">Plan a route</button></div><div style="color:#52514e"></div></div>
+      <table style="border-collapse:collapse;margin-bottom:8px;width:100%"><tr><th></th><th style="text-align:right;padding:1px 8px 1px 0">Counted</th><th style="text-align:right;padding:1px 8px 1px 0">Miles</th><th style="text-align:right;padding:1px 0">Nodes</th></tr><tr><td>Cart paths</td><td style="text-align:right;padding:1px 8px 1px 0">780</td><td style="text-align:right;padding:1px 8px 1px 0">103.56 mi</td><td style="text-align:right">9,824</td></tr><tr><td>Roads</td><td style="text-align:right;padding:1px 8px 1px 0">2,392</td><td style="text-align:right;padding:1px 8px 1px 0">248.47 mi</td><td style="text-align:right">23,630</td></tr><tr><td colspan="4">329 runs in the city (latest Sep 12, 2026)</td></tr></table>
+      <div style="display:flex;gap:4px;margin-bottom:8px"><input placeholder="Cart path OBJECTID_1" style="flex:1;min-width:0;font:13px system-ui"><button style="font:13px system-ui">Find</button></div>
+      <div style="line-height:1.5">
+        <div><span style="display:inline-block;width:18px;border-top:2.5px solid #199e70;margin:0 4px 3px 0;vertical-align:middle"></span>Complete cart path</div>
+        <div><span style="display:inline-block;width:18px;border-top:2.5px solid #1c5cab;margin:0 4px 3px 0;vertical-align:middle"></span>Run<span style="display:inline-block;width:18px;border-top:4px solid #d95926;margin:0 4px 3px 8px;vertical-align:middle"></span>Not run <span style="color:#77766f">(cart path, incomplete)</span></div>
+        <div><span style="display:inline-block;width:18px;border-top:1.5px solid #5598e7;margin:0 4px 3px 0;vertical-align:middle"></span>Road run<span style="display:inline-block;width:18px;border-top:3px solid #8f8e89;margin:0 4px 3px 8px;vertical-align:middle"></span>Road not run</div>
+        <div><span style="display:inline-block;width:18px;border-top:3px dashed #5f5e5a;margin:0 4px 3px 0;vertical-align:middle"></span>Excluded<span style="display:inline-block;width:18px;border-top:2px solid #cac9c4;margin:0 4px 3px 8px;vertical-align:middle"></span>Not counted</div>
+        <div><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#fff;border:1.5px solid #3a3936;margin:0 4px 1px 0;vertical-align:middle"></span>Missed path node<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#ffd84d;border:1.5px solid #3a3936;margin:0 4px 1px 8px;vertical-align:middle"></span>Missed road node</div>
+        <div><span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#333;margin:0 4px 1px 0;vertical-align:middle"></span>Hit node <span style="color:#77766f">(nodes show from zoom 15)</span></div>
+        <div><span style="display:inline-block;width:18px;border-top:8px solid #9fd8ff;margin:0 4px 3px 0;vertical-align:middle"></span>Latest city change <span style="color:#77766f">(when turned on)</span></div>
+      </div>
+    </div>
+    <div style="position:absolute;right:10px;bottom:10px;background:#fff;padding:6px 10px;border-radius:5px;box-shadow:0 1px 5px rgba(0,0,0,.4);font-size:12px;opacity:.55">
+      <div>☑ Roads</div><div>☑ Cart paths</div><div>☑ Missed cart path nodes</div><div>☑ Missed road nodes</div><div>☐ Hit nodes</div><div>☐ Run tracks</div><div>☐ Graph islands</div><div>☐ Latest city changes</div>
+    </div>
+  </div>
+</div>
+<p class="dv-notes">Panel overlaps the layer control at this height, and the two lists say the same thing twice. Everything is 13px.</p>
+</div>
+
+</div>
+<p class="dv-next">Reply with a pick: "<a class="dv-oid" href="#1a">1a</a>", "<a class="dv-oid" href="#1c">1c</a> but the rail on the right", or "combine <a class="dv-oid" href="#1a">1a</a>'s merged legend with <a class="dv-oid" href="#1b">1b</a>'s top bar". Then I'll build tokens.css, every mockup state, the component spec and the Leaflet style sheet.</p>
+</section>
+
+</x-dc>
+</body>
+</html>
