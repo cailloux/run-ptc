@@ -146,7 +146,7 @@ Multipart segments are exploded so each part (1 m or longer) becomes its own edg
 
 pgRouting 4.0 has no topology builder that fits these rules. `pgr_separateTouching` failed on this data (16 overlapping road pairs) and can't tell a tunnel from an at-grade crossing. So the splitting and the end snapping are our own SQL (`app/graph.py`), while pgRouting assigns junctions (`pgr_extractVertices`) and finds islands (`pgr_connectedComponents`). The build takes under a second and runs after every city import, or on demand with `python -m app.cli graph`.
 
-Each edge also records the stretch of its segment's part that it covers (`part_from`, `part_to`), which maps nodes onto edges. That's what a future "finish these segments for me" planner needs: the graph is a standard pgRouting edges table, so `pgr_dijkstraCostMatrix`, `pgr_TSP`, and `pgr_dijkstraVia` (all installed) can run on it directly.
+Each edge also records the stretch of its segment's part that it covers (`part_from`, `part_to`), which maps nodes onto edges. The route builder's new miles and Finish segments tools use it (below). The graph is a standard pgRouting edges table, so pgRouting's functions run on it directly.
 
 As of Sept 2026 the graph has 5,652 edges, 4,424 junctions, and 8 components: a main network of 381.2 mi plus 7 islands totaling 1.39 mi, which are shown on the map for review.
 
@@ -165,6 +165,15 @@ The route is a start point plus an ordered list of legs, and each leg holds its 
 **Undo and redo.** Every edit (click, retrace, clear) pushes a snapshot onto a history stack. Undo and redo step through it with buttons or Ctrl+Z / Ctrl+Shift+Z. Clear is undoable too.
 
 **Distance.** The route's total distance in miles updates after every edit.
+
+**New miles.** After every edit the whole route goes to `POST /route/coverage`, which samples it every 5 m. A sample is new when it lies on a not-run node interval (the red and amber on the map) of a counted, non-excluded segment, and no earlier sample of the route passed the same spot. Out-and-backs and retraces therefore count once. The route draws light blue, with the new stretches dark blue on top, and a chip next to the distance reads "3.10 mi new". Each stretch's ends are accurate to about half a sample.
+
+**Finish segments.** A tool in the route bar. Click a start, or keep the current route's start, then click lines to pick segments with not-run stretches. Picked segments get a blue band. Build replaces the route, in one undoable step, with a loop from the start that runs every not-run stretch of the picks (`POST /route/finish`, `app/finish.py`):
+
+- Required are the graph edges that overlap a not-run interval. Consecutive ones along a segment part chain into one unit, run either way.
+- Units are ordered greedily: from the current junction, take the unit whose nearer end is cheapest to reach, costed by `pgr_dijkstraCostMatrix` (so the path-over-road preference holds). Deadheads between units come from `pgr_dijkstra`. The first and last legs route from and back to the exact start click.
+- Units on an island the start can't reach are skipped, and the message says how many.
+- Known limits: greedy order can leave long deadheads on scattered picks (2-opt would tighten it); a required edge is run end to end even when only part of it is unrun; and dragging a waypoint on a built route reroutes that leg by the shortest path, which may leave its segment (undo restores it).
 
 **Export.** Export produces a GPX file with a single track, named by date and distance. You import it into Garmin Connect as a course and sync it to the watch.
 
@@ -197,6 +206,8 @@ GET  /status                           data health, city layers, alert episodes,
 GET  /changes                          segments from each layer's latest city change
 POST /route/snap  {lat, lon} -> the point on the network
 POST /route/leg   {from, to} -> latlngs, length_m, snapped from/to
+POST /route/coverage {latlngs} -> new_m, new stretches (lines of latlngs)
+POST /route/finish {start, segment_ids} -> from, legs [{latlngs, length_m, to}], length_m, skipped
                                  422 too far from the network or unreachable, 503 no graph
 GET  /graph/islands                    edges not connected to the main network
 ```
@@ -272,7 +283,6 @@ Each phase can be verified on the map before the next builds on it. Routing come
 
 Designed or discussed but not built:
 
-- **New miles on a route:** draw the route in two blues (new ground and ground already run) with a "3.10 mi new" figure. Needs `/route/leg` to return per-stretch coverage.
 - **Elevation profile** under the map while planning, with gain and loss. Needs an elevation source (e.g. a USGS DEM loaded into PostGIS).
 - **FIT course export** next to GPX, with turn cues only at real junctions, so the watch stops prompting turns on winding paths. Specced in [docs/specs/fit-course-export.md](specs/fit-course-export.md); starts with a test course on the Forerunner 955.
 - **Divided roads as one centerline** on the map, for coverage and nodes; today both carriageways show the kept side's coverage and nodes sit on the kept side.

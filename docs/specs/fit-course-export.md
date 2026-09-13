@@ -99,8 +99,6 @@ Check what the 955 actually displays during Step 0.
 - **Export:** the client POSTs `{name, points, junctions: [{vertex, index}], u_turns: [index]}` to a new **`POST /route/fit`**. The server classifies each junction from the polyline around the index (the bearings) and from the graph (the vertex's other branches, and the target segment's name and layer). It then returns the FIT file as a download.
 - **Classification stays on the server,** next to the graph, and is unit-tested like the rest of the geometry code.
 
-"New miles on a route", the first item on PLAN.md's Later list, also needs `/route/leg` to report which edges it used. Build that part once, for both features.
-
 ### FIT encoding
 
 This is a small encoder written by us in `app/fit.py`. The FIT protocol is documented and a course needs only a handful of messages, so no new dependency is needed to write files. Tests decode the output with `garmin-fit-sdk`. Message order follows what Garmin's own course exports use; confirm it against a Connect-exported course in Step 0.
