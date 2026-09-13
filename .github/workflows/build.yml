@@ -38,10 +38,27 @@ jobs:
           tags: run-ptc:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - run: >-
+      - name: Tests
+        shell: bash   # runs with pipefail, so a pytest failure fails the step through tee
+        run: >-
           docker run --rm --network host
           -e TEST_DATABASE_URL=postgresql://postgres@localhost:5432/test
-          run-ptc:test
+          run-ptc:test pytest -q -ra -p no:cacheprovider tests | tee pytest.log
+      # The count, plus each failing test's name and error, on the run's Summary tab.
+      - name: Test summary
+        if: always()
+        run: |
+          [ -f pytest.log ] || exit 0
+          {
+            echo '### Tests'
+            echo '```'
+            if grep -q 'short test summary info' pytest.log; then
+              sed -n '/short test summary info/,$p' pytest.log
+            else
+              tail -n 1 pytest.log
+            fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: docker/login-action@v4
         if: github.event_name == 'push'
