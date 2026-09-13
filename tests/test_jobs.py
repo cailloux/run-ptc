@@ -1,7 +1,7 @@
 import pytest
 
 from app import db
-from app.jobs import JOB_LOCK, JobBusy, job_running, last_runs, mark_interrupted, start_job
+from app.jobs import JOB_LOCK, JobBusy, job_running, mark_interrupted, start_job
 
 
 @pytest.fixture
@@ -69,11 +69,3 @@ def test_interrupted_jobs_are_marked_only_when_no_one_holds_the_lock(conn, other
     status, _, error, finished = job_row(conn, job_id)
     assert (status, finished) == ("failed", True) and error.startswith("interrupted")
 
-
-def test_last_runs_reports_the_latest_attempt_and_the_last_success(conn, connect):
-    start_job("sync", "cli", connect=connect).run(lambda c: ["1 new city run", "detail"])
-    start_job("sync", "button", connect=connect).run(lambda c: 1 / 0, reraise=False)
-    status = last_runs(conn, "sync")
-    assert status["running"] is False
-    assert (status["latest"]["status"], status["latest"]["trigger"]) == ("failed", "button")
-    assert status["last_ok"]["headline"] == "1 new city run"

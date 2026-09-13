@@ -8,12 +8,7 @@ const $ = (id) => document.getElementById(id);
 // A fractional zoom lets the first view fit the city to the page; see the
 // fitBounds below for why it's only the first view.
 const map = L.map('map', { preferCanvas: true, zoomControl: false, zoomSnap: 0.25 }).setView([33.39, -84.57], 13);
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-  className: 'basemap',
-  maxNativeZoom: 19,
-  maxZoom: 20,
-}).addTo(map);
+basemap(map);
 
 // Per layer and state: [colour token, weight, loud]. Excluded and uncounted
 // segments aren't drawn.

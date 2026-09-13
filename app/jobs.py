@@ -92,22 +92,3 @@ def mark_interrupted(conn: psycopg.Connection) -> int:
     finally:
         conn.execute("SELECT pg_advisory_unlock(%s)", (JOB_LOCK,))
 
-
-def last_runs(conn: psycopg.Connection, job: str) -> dict:
-    """The latest run of a job and the latest successful one, for status displays."""
-    cols = ("id", "trigger", "status", "started_at", "finished_at", "summary", "error")
-    latest = conn.execute(
-        f"SELECT {', '.join(cols)} FROM job_run WHERE job = %s ORDER BY started_at DESC, id DESC LIMIT 1",
-        (job,),
-    ).fetchone()
-    last_ok = conn.execute(
-        "SELECT finished_at, summary FROM job_run WHERE job = %s AND status = 'ok'"
-        " ORDER BY finished_at DESC LIMIT 1",
-        (job,),
-    ).fetchone()
-    return {
-        "running": job_running(conn),
-        "latest": dict(zip(cols, latest)) if latest else None,
-        "last_ok": {"finished_at": last_ok[0], "headline": (last_ok[1] or "").split("\n")[0]}
-                   if last_ok else None,
-    }

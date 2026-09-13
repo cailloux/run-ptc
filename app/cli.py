@@ -9,14 +9,13 @@ from datetime import UTC, date, datetime
 import httpx
 
 from app import db, exclusions, health
-from app.arcgis import layer_signature
 from app.config import intervals_credentials, load_settings
 from app.graph import build_graph
-from app.importer import LAYERS, METERS_PER_MILE, import_layer
+from app.importer import METERS_PER_MILE
 from app.intervals import IntervalsClient
 from app.jobs import JobBusy, JobFn, start_job
 from app.matching import metrics, near_miss_lines, near_misses, recompute
-from app.refresh import download, refresh, store_signature
+from app.refresh import refresh
 from app.sync import EASTERN, sync, sync_window
 
 
@@ -53,41 +52,16 @@ def cmd_migrate(args) -> int:
     return 0
 
 
-def cmd_import(args) -> int:
-    settings = load_settings()
-    # Validate exclusions before spending time on the download.
-    excl = exclusions.load()
-    names = [args.layer] if args.layer else list(LAYERS)
-
-    def job(conn) -> list[str]:
-        lines = []
-        signatures = {}
-        with httpx.Client(timeout=120) as client:
-            for name in names:
-                layer = LAYERS[name]
-                # Taken before the download, so an edit in between is caught
-                # by the next refresh rather than missed.
-                signatures[name] = layer_signature(client, layer.url, layer.oid_field)
-                features = download(client, layer, signatures[name])
-                lines += import_layer(conn, layer, features, settings, excl).lines()
-        # City data changed, so the routing graph is rebuilt from it.
-        lines += build_graph(conn, settings).lines()
-        for name, sig in signatures.items():
-            store_signature(conn, name, sig)
-        return lines
-
-    return _run_job(args, "import", job)
-
-
 def cmd_refresh(args) -> int:
+    """refresh imports the layers the city changed; import is a refresh that imports every layer."""
     settings = load_settings()
-    excl = exclusions.load()
+    excl = exclusions.load()   # checked before any download
 
     def job(conn) -> list[str]:
         with httpx.Client(timeout=120) as client:
             return refresh(conn, client, settings, excl, force=args.force).lines()
 
-    return _run_job(args, "refresh", job)
+    return _run_job(args, args.command, job)
 
 
 def cmd_graph(args) -> int:
@@ -186,9 +160,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="recorded in job_run; the nightly script passes schedule")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("migrate", help="apply pending migrations").set_defaults(func=cmd_migrate)
-    p = sub.add_parser("import", help="import city layers, regenerate nodes, apply exclusions")
-    p.add_argument("--layer", choices=list(LAYERS))
-    p.set_defaults(func=cmd_import)
+    sub.add_parser("import", help="import every city layer, with a change report").set_defaults(
+        func=cmd_refresh, force=True)
     sub.add_parser("exclusions", help="reapply config/exclusions.yaml").set_defaults(
         func=cmd_exclusions)
     p = sub.add_parser("sync", help="sync runs from Intervals.icu (read-only)")

@@ -1,7 +1,5 @@
 import logging
 import time
-from pathlib import Path
-
 import psycopg
 
 from app.config import MIGRATIONS_DIR, database_url
@@ -22,9 +20,9 @@ def connect(url: str | None = None) -> psycopg.Connection:
     return psycopg.connect(url or database_url(), autocommit=True, options="-c jit=off")
 
 
-def connect_with_retry(timeout_s: float = 60) -> psycopg.Connection:
+def connect_with_retry() -> psycopg.Connection:
     """Wait for the database. Unraid starts containers without ordering."""
-    deadline = time.monotonic() + timeout_s
+    deadline = time.monotonic() + 60
     while True:
         try:
             return connect()
@@ -35,7 +33,7 @@ def connect_with_retry(timeout_s: float = 60) -> psycopg.Connection:
             time.sleep(2)
 
 
-def migrate(conn: psycopg.Connection, migrations_dir: Path = MIGRATIONS_DIR) -> list[str]:
+def migrate(conn: psycopg.Connection) -> list[str]:
     """Apply pending migrations in filename order, each in its own transaction."""
     applied_now = []
     conn.execute("SELECT pg_advisory_lock(%s)", (MIGRATION_LOCK,))
@@ -45,7 +43,7 @@ def migrate(conn: psycopg.Connection, migrations_dir: Path = MIGRATIONS_DIR) -> 
             " version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())"
         )
         done = {r[0] for r in conn.execute("SELECT version FROM schema_migrations")}
-        for path in sorted(migrations_dir.glob("*.sql")):
+        for path in sorted(MIGRATIONS_DIR.glob("*.sql")):
             if path.name in done:
                 continue
             with conn.transaction():

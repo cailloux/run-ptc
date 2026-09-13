@@ -35,20 +35,16 @@ function lineStyle(name, extra = {}) {
   return { color: token(`--map-${name}`), weight: parseFloat(token(`--map-w-${name}`)), opacity: 1, ...extra };
 }
 
-// The coverage lines, one style per network state (docs/design/map-styles.md).
-// Finished ground is gray; colour means unfinished.
-function coverageStyles() {
-  return {
-    cartpath: {
-      complete: lineStyle('cartpath-complete'),
-      run: lineStyle('cartpath-run'),
-      not_run: lineStyle('cartpath-not-run'),
-    },
-    road: {
-      run: lineStyle('road-run'),
-      not_run: lineStyle('road-not-run'),
-    },
-    excluded: lineStyle('excluded', { dashArray: '4 6' }),
-    uncounted: lineStyle('uncounted'),
-  };
+// OpenStreetMap's standard tiles, used within the OSMF tile policy
+// (https://operations.osmfoundation.org/policies/tiles/): visible
+// attribution, the browser's normal Referer, no bulk or prefetching. They're
+// shown in grayscale (style.css) so OSM's own colours don't compete with
+// the coverage lines, which are judged against this gray.
+function basemap(map) {
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    className: 'basemap',
+    maxNativeZoom: 19,
+    maxZoom: 20,
+  }).addTo(map);
 }
