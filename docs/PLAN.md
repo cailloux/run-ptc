@@ -178,9 +178,9 @@ The map stays on Leaflet, since the viewer already validated it with this data. 
 - Excluded segments, greyed out
 - Run tracks, off by default
 
-The coverage colors were checked with a colorblind-safety validator against the gray basemap: the three cart path states are distinguishable under every common color-vision deficiency, and line weight separates complete from partial as a second cue.
+Since Phase 8 the coverage palette is "Graphite": finished ground is gray and color means unfinished (cart paths not run in red, the heaviest line; roads not run in amber). Its colors and line weights live in `app/static/tokens.css`, which the map reads at startup.
 
-A side panel shows cart path miles complete, the percentage, segments complete, road miles covered, the last sync time, and a sync button. The UI is desktop-first.
+A top bar shows cart path completion (percentage, miles, segments) and road miles covered, the last sync, and the ways in: Plan a route, a Layers drawer (the legend, whose rows are the layer toggles), a Data drawer (find by OID, the stats table, sync detail), and the status page. The UI is desktop-first and usable on a phone.
 
 The sync button runs the same incremental sync as the CLI (a week before the newest run through today) in the background, and the panel polls until it finishes, then reloads the coverage. Sync, import, and recompute share one lock, so only one runs at a time from any trigger; a second request gets a 409 from the API or an "another job is running" exit from the CLI. Every run of a data job is recorded in `job_run` (trigger, times, status, summary, error), which the panel reads for the last sync time.
 
@@ -192,6 +192,9 @@ GET  /nodes/{id}                       hit run's date, name, Intervals id
 GET  /activities
 GET  /sync                             latest sync, last success, running?
 POST /sync                             202 started, 409 busy, 503 no credentials
+POST /refresh                          city check in the background; 202, 409 busy
+GET  /status                           data health, city layers, alert episodes, recent jobs
+GET  /changes                          segments from each layer's latest city change
 POST /route/snap  {lat, lon} -> the point on the network
 POST /route/leg   {from, to} -> latlngs, length_m, snapped from/to
                                  422 too far from the network or unreachable, 503 no graph
@@ -253,7 +256,26 @@ As built:
 
 One holistic design pass over the whole UI once every feature is in place, instead of styling each phase piecemeal: layout (a fixed sidebar was deferred from Phase 4), typography, the coverage palette in context, legend and layer controls, and the route builder's controls. Also consider collapsing each divided road to a single line on the map (a centerline between the carriageways) for both coverage and nodes; today both carriageways show the kept side's coverage and nodes sit on the kept side.
 
+As built, from the Claude Design artifacts in `docs/design/` (direction 1b, palette B "Graphite"):
+
+- **Layout:** the floating panel is gone. A top bar holds the numbers you watch (cart path completion with a meter, road coverage, the last sync) and the ways in. The Layers and Data drawers open one at a time under it, and the freshness banner sits between the bar and the map instead of over it. Leaflet's layer control is gone: each Layers row is a checkbox with its swatch, and each coverage state is its own Leaflet layer so it can be toggled.
+- **Tokens:** `app/static/tokens.css` holds type, color, spacing, and the map's line colors and weights; the map reads the `--map-*` properties at startup, so colors live in one place.
+- **Planning is a mode:** a dark route bar replaces the top bar at the same height (distance as the headline number, the tools, a help and error line, Done or Esc), the map gets a blue edge and a first-click hint, and the route is blue, the only cool color on the map.
+- **Popups** share one shape: a swatch naming the line clicked, a headline, and label/value rows, with skeleton rows while loading.
+- **Status page:** the two source cards side by side with a state edge color, errors in a wrapping monospace block, a running state (indeterminate bar, when it started), and friendlier trigger names (manual, nightly, command line).
+- **Share pages:** `left.html` (what's still unrun) and `progress.html` (what's done), one template with one loud layer each and no controls. Linked from the Data drawer; like the rest of the app, they're reachable on the local network only.
+- **Phone:** the bar stacks, the actions dock at the bottom, the drawers become bottom sheets, and the route bar becomes a two-row dock.
+
 Each phase can be verified on the map before the next builds on it. Routing comes last because it doesn't depend on coverage, and graph topology is the fiddliest part to get right.
+
+## Later
+
+Designed or discussed but not built:
+
+- **New miles on a route:** draw the route in two blues (new ground and ground already run) with a "3.10 mi new" figure. Needs `/route/leg` to return per-stretch coverage.
+- **Elevation profile** under the map while planning, with gain and loss. Needs an elevation source (e.g. a USGS DEM loaded into PostGIS).
+- **FIT course export** next to GPX.
+- **Divided roads as one centerline** on the map, for coverage and nodes; today both carriageways show the kept side's coverage and nodes sit on the kept side.
 
 ## Tunable defaults
 

@@ -19,7 +19,7 @@ Single-user planning tool for running every cart path and road in Peachtree City
 - Python 3.14, FastAPI, psycopg 3. Raw SQL for spatial queries; no ORM. The Dockerfile's base image is the single source of the Python version; CI runs the tests inside that image.
 - Postgres with PostGIS and pgRouting via the `pgrouting/pgrouting` image. The stock `postgres` and `postgis/postgis` images lack pgRouting.
 - Plain SQL migrations in `db/migrations/`, numbered and applied in order.
-- Frontend: Leaflet with plain JS and no build step, served by FastAPI from `app/static/`. Load libraries from cdnjs.
+- Frontend: Leaflet with plain JS and no build step, served by FastAPI from `app/static/`. Load libraries from cdnjs. Design tokens (type, color, spacing, and the map's line colors and weights) live in `app/static/tokens.css`; the map reads the `--map-*` properties at startup, so don't copy colors into JS. The design reference is `docs/design/`.
 - pytest for tests.
 
 ## Geometry rules
