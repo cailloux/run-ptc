@@ -36,6 +36,7 @@ Single-user planning tool for running every cart path and road in Peachtree City
 ## External services
 
 **City ArcGIS layers:** public, no auth. The URLs and paging rules are in `docs/PLAN.md` under "Data sources." The server caps each response at 1,000 records, so always page with `resultOffset`.
+- The nightly refresh and real data updates are fine. While testing or debugging, ask before running anything that calls the city server: `refresh` (with or without `--force`), `import`, the status page's "Check city now", or a probe with curl. A forced refresh is about 7 requests. Test import and refresh logic against the tests' fake city instead.
 
 **Intervals.icu:**
 - Auth is HTTP Basic with the literal username `API_KEY` and the API key as the password.
