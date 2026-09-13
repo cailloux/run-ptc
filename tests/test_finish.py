@@ -146,6 +146,19 @@ def test_visits_every_picked_segment(conn):
     assert f.length_m == pytest.approx(100 + 3 * 200 + 100, abs=0.5)
 
 
+def test_order_beats_greedy(conn):
+    # One line along the x axis in pieces; three short pieces are unrun:
+    # -25..-15, 10..20, and 100..110. From 0, greedy takes 10..20, then
+    # -25..-15, then 100..110 (310 m). The best round trip is 2 x 25 + 2 x 110.
+    xs = [-200, -25, -15, 0, 10, 20, 100, 110, 200]
+    build(conn, [cartpath(i, line((a, 0), (b, 0))) for i, (a, b) in enumerate(zip(xs, xs[1:]), 1)])
+    todo = {2: (-25, -15), 5: (10, 20), 7: (100, 110)}
+    for oid in set(range(1, len(xs))) - set(todo):
+        hit(conn, oid, range(20))
+    f = finish(conn, (0, 0), list(todo))
+    assert f.length_m == pytest.approx(270, abs=0.5)
+
+
 def test_whole_segment_run_has_nothing_left(conn):
     build(conn, [cartpath(1, line((0, 0), (100, 0)))])
     hit(conn, 1, range(6))

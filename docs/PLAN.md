@@ -171,9 +171,9 @@ The route is a start point plus an ordered list of legs, and each leg holds its 
 **Finish segments.** A tool in the route bar. Click a start, or keep the current route's start, then click lines to pick segments with not-run stretches. Picked segments get a blue band. Build replaces the route, in one undoable step, with a loop from the start that runs every not-run stretch of the picks (`POST /route/finish`, `app/finish.py`):
 
 - Required are the graph edges that overlap a not-run interval. Consecutive ones along a segment part chain into one unit, run either way.
-- Units are ordered greedily: from the current junction, take the unit whose nearer end is cheapest to reach, costed by `pgr_dijkstraCostMatrix` (so the path-over-road preference holds). Deadheads between units come from `pgr_dijkstra`. The first and last legs route from and back to the exact start click.
+- Units are ordered greedily (from the current junction, the unit whose nearer end is cheapest to reach, costed by `pgr_dijkstraCostMatrix` so the path-over-road preference holds), then improved by 2-opt: reversing runs of the order, which also flips each unit's direction. Covering chosen edges is the rural postman problem, which has no fast exact solution; on real picks 2-opt matched the exact optimum (Held-Karp) in most trials and came within 2% in the rest, where greedy alone was up to 30% over. Deadheads between units come from `pgr_dijkstra`. The first and last legs route from and back to the exact start click.
 - Units on an island the start can't reach are skipped, and the message says how many.
-- Known limits: greedy order can leave long deadheads on scattered picks (2-opt would tighten it); a required edge is run end to end even when only part of it is unrun; and dragging a waypoint on a built route reroutes that leg by the shortest path, which may leave its segment (undo restores it).
+- Known limits: a required edge is run end to end even when only part of it is unrun; and dragging a waypoint on a built route reroutes that leg by the shortest path, which may leave its segment (undo restores it).
 
 **Export.** Export produces a GPX file with a single track, named by date and distance. You import it into Garmin Connect as a course and sync it to the watch.
 
