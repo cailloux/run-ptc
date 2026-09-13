@@ -6,7 +6,7 @@ import sys
 import time
 from datetime import UTC, date, datetime
 
-import httpx
+import httpx2
 
 from app import db, exclusions, health
 from app.config import intervals_credentials, load_settings
@@ -58,7 +58,7 @@ def cmd_refresh(args) -> int:
     excl = exclusions.load()   # checked before any download
 
     def job(conn) -> list[str]:
-        with httpx.Client(timeout=120) as client:
+        with httpx2.Client(timeout=120) as client:
             return refresh(conn, client, settings, excl, force=args.force).lines()
 
     return _run_job(args, args.command, job)
@@ -153,8 +153,8 @@ def cmd_stats(args) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
-    # httpx logs every request at INFO; a backfill makes hundreds.
-    logging.getLogger("httpx").setLevel(logging.WARNING)
+    # httpx2 logs every request at INFO; a backfill makes hundreds.
+    logging.getLogger("httpx2").setLevel(logging.WARNING)
     parser = argparse.ArgumentParser(prog="python -m app.cli")
     parser.add_argument("--trigger", choices=["cli", "schedule"], default="cli",
                         help="recorded in job_run; the nightly script passes schedule")

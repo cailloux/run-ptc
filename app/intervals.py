@@ -7,7 +7,7 @@ Endpoint and field names follow https://intervals.icu/api/v1/docs.
 import time
 from datetime import date
 
-import httpx
+import httpx2
 
 BASE_URL = "https://intervals.icu/api/v1"
 LIST_FIELDS = ("id", "start_date", "type", "name", "distance", "source", "stream_types", "trainer")
@@ -21,10 +21,10 @@ class IntervalsShapeError(RuntimeError):
 
 
 class IntervalsClient:
-    def __init__(self, athlete_id: str, api_key: str, *, transport: httpx.BaseTransport | None = None,
+    def __init__(self, athlete_id: str, api_key: str, *, transport: httpx2.BaseTransport | None = None,
                  tries: int = 3, sleep=time.sleep):
         self._athlete_id = athlete_id
-        self._http = httpx.Client(base_url=BASE_URL, auth=("API_KEY", api_key), timeout=60,
+        self._http = httpx2.Client(base_url=BASE_URL, auth=("API_KEY", api_key), timeout=60,
                                   transport=transport)
         self._tries = tries
         self._sleep = sleep
@@ -65,7 +65,7 @@ class IntervalsClient:
         return parse_latlng(streams, activity_id)
 
 
-def _retry_delay(resp: httpx.Response, attempt: int) -> float:
+def _retry_delay(resp: httpx2.Response, attempt: int) -> float:
     try:
         return float(resp.headers["Retry-After"])
     except (KeyError, ValueError):

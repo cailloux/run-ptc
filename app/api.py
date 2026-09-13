@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
-import httpx
+import httpx2
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response
 from psycopg.rows import dict_row
 from pydantic import BaseModel, Field
@@ -64,8 +64,8 @@ def default_intervals_client() -> IntervalsClient:
     return IntervalsClient(athlete_id, api_key)
 
 
-def default_city_client() -> httpx.Client:
-    return httpx.Client(timeout=120)
+def default_city_client() -> httpx2.Client:
+    return httpx2.Client(timeout=120)
 
 
 BUSY = "another job is running (sync, import, refresh, or recompute)"

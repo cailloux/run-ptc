@@ -1,6 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
-import httpx
+import httpx2
 import pytest
 from fastapi.testclient import TestClient
 
@@ -194,7 +194,7 @@ def test_imports_mark_added_and_changed_segments_but_not_the_first_import(conn):
 
 
 class MockCity:
-    """The city's ArcGIS server over httpx.MockTransport: statistics and features."""
+    """The city's ArcGIS server over httpx2.MockTransport: statistics and features."""
 
     def __init__(self, cartpaths, roads):
         self.features = {"cartpath": cartpaths, "road": roads}
@@ -203,14 +203,14 @@ class MockCity:
         layer = "cartpath" if "GolfCartPath" in request.url.path else "road"
         feats = self.features[layer]
         if "outStatistics" in request.url.params:
-            return httpx.Response(200, json={"features": [{"attributes": {
+            return httpx2.Response(200, json={"features": [{"attributes": {
                 "n": len(feats), "max_oid": 1000 + len(feats), "max_edited": 1767225600000}}]})
-        return httpx.Response(200, json={
+        return httpx2.Response(200, json={
             "type": "FeatureCollection", "features": feats,
             "crs": {"type": "name", "properties": {"name": "EPSG:32616"}}})
 
     def client(self):
-        return httpx.Client(transport=httpx.MockTransport(self.handler))
+        return httpx2.Client(transport=httpx2.MockTransport(self.handler))
 
 
 @pytest.fixture
