@@ -219,40 +219,35 @@ def _two_opt(order: list[tuple[Unit, bool]], home: int, dist) -> bool:
     return changed
 
 
-def _cost(order: list[tuple[Unit, bool]], home: int, dist) -> float:
-    at = home
-    total = 0.0
-    for step in order:
-        total += dist(at, _enter(step))
-        at = _leave(step)
-    return total + dist(at, home)
-
-
 def _or_opt(order: list[tuple[Unit, bool]], home: int, dist) -> bool:
     """Improve a round trip by moving one unit to a better spot in it.
 
     2-opt only reverses whole runs, so it can't move a single stop past a
     same-cost detour to interleave it, which is exactly the shape a branch
     off the middle of a required street produces. Try every unit at every
-    other position and direction; take the first move that's cheaper.
-
-    ponytail: recomputes the whole route's cost per candidate (O(units^3)
-    a pass) instead of an incremental delta; fine at the segment-picker's
-    scale (up to 150), switch to a delta if picks grow much larger.
+    other position and direction, scored by the change in cost (removing
+    it from where it is, plus inserting it at the candidate gap) rather
+    than a full re-sum, so a pass is O(units^2) like 2-opt. Take the first
+    move that's cheaper.
     """
     changed = False
     improved = True
     while improved:
         improved = False
-        cost = _cost(order, home, dist)
         for i in range(len(order)):
+            before = home if i == 0 else _leave(order[i - 1])
+            after = home if i == len(order) - 1 else _enter(order[i + 1])
+            removed = dist(before, after) - dist(before, _enter(order[i])) - dist(_leave(order[i]), after)
             u = order[i][0]
             rest = order[:i] + order[i + 1:]
             for j in range(len(rest) + 1):
+                b = home if j == 0 else _leave(rest[j - 1])
+                a = home if j == len(rest) else _enter(rest[j])
+                base = dist(b, a)
                 for fwd in (True, False):
-                    candidate = rest[:j] + [(u, fwd)] + rest[j:]
-                    if _cost(candidate, home, dist) < cost - 1e-6:
-                        order[:] = candidate
+                    added = dist(b, _enter((u, fwd))) + dist(_leave((u, fwd)), a) - base
+                    if removed + added < -1e-6:
+                        order[:] = rest[:j] + [(u, fwd)] + rest[j:]
                         improved = changed = True
                         break
                 if improved:
