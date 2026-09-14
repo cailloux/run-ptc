@@ -313,10 +313,10 @@ details[open] summary::before { transform: rotate(90deg); }
 .share .figure { display: flex; flex-direction: column; align-items: flex-end; }
 .share .figure b { font-weight: var(--weight-bold); letter-spacing: var(--tracking-tight); line-height: 1; font-variant-numeric: tabular-nums; }
 .share .figure .big { font-size: var(--text-display); }
-.share .figure .mid { font-size: 28px; color: var(--map-share-road); }
+.share .figure .mid { font-size: 28px; }
 .share .figure span { font-size: var(--text-small); color: var(--color-text-muted); margin-top: 4px; }
-.share[data-view="left"] .figure .big { color: var(--map-cartpath-not-run); }
-.share[data-view="done"] .figure .big { color: var(--map-share-done); }
+.share[data-view="left"] .figure .big, .share[data-view="left"] .figure .mid { color: var(--map-cartpath-not-run); }
+.share[data-view="done"] .figure .big, .share[data-view="done"] .figure .mid { color: var(--map-share-done); }
 .share .map-wrap { position: relative; flex: 1; }
 .share .mini-legend {
   position: absolute; left: var(--space-5); bottom: var(--space-5); z-index: 1000; display: flex; gap: var(--space-7);

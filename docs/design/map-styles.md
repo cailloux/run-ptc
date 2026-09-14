@@ -90,24 +90,21 @@ have read as coverage. Pale blue sits under the lines without competing.
 
 ## Share pages — left.html and progress.html
 
-One styles object with two entries; each page picks one. No nodes, no popups,
-no interaction, and excluded/uncounted segments are not drawn at all.
+One styles object with two entries; each page picks one. Binary maps: cart
+path and road share a single color per page, the other state is not drawn at
+all (the basemap shows through it), and neither are excluded/uncounted
+segments. No nodes, no popups, no interaction.
 
 ```js
 const SHARE_STYLE = {
-  left: {   // left.html — what is still unrun carries all the weight
-    cartpath: { not_run: { color: '#ff3b1f', weight: 4.5 },
-                run:      { color: '#e6e4de', weight: 1.5 },
-                complete: { color: '#e6e4de', weight: 1.5 } },
-    road:     { not_run: { color: '#8b8983', weight: 2.5 },
-                run:      { color: '#e6e4de', weight: 1.5 } },
+  left: {   // left.html — what is still unrun
+    cartpath: { not_run: { color: '#ff3b1f', weight: 2 } },
+    road:     { not_run: { color: '#ff3b1f', weight: 2 } },
   },
-  done: {   // progress.html — the inverse
-    cartpath: { complete: { color: '#34332f', weight: 3.5 },
-                run:      { color: '#34332f', weight: 3.5 },
-                not_run:  { color: '#dad8d2', weight: 2 } },
-    road:     { run:      { color: '#8b8983', weight: 2 },
-                not_run:  { color: '#dad8d2', weight: 2 } },
+  done: {   // progress.html — what is run
+    cartpath: { complete: { color: '#21a645', weight: 2 },
+                run:      { color: '#21a645', weight: 2 } },
+    road:     { run:      { color: '#21a645', weight: 2 } },
   },
 };
 ```

@@ -92,11 +92,9 @@
   --map-route-tint-border: #b9d2fb;
   --map-route-tint-text: #123e73;
 
-  /* share pages (left.html, progress.html): one loud layer, the rest ghosted */
-  --map-share-ghost: #e6e4de;       /* finished ground on left.html */
-  --map-share-ghost-left: #dad8d2;  /* unfinished ground on progress.html */
-  --map-share-done: #34332f;
-  --map-share-road: #8b8983;
+  /* share pages (left.html, progress.html): binary maps, cart path and road
+     drawn the same way; the other state isn't drawn at all */
+  --map-share-done: #21a645;  /* run/complete, on progress.html */
 
   /* line weights, mirrored in map.js */
   --map-w-cartpath-complete: 2;
