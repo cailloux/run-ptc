@@ -1,6 +1,8 @@
 // The share pages: left.html (what's still unrun) and progress.html (what's
-// done). One loud layer carries the page; everything else is a ghost. No
-// controls, nodes, popups, or routing (docs/design/map-styles.md, SHARE_STYLE).
+// done). Each is a binary map: one state draws, in one color for cart path
+// and road alike; the other state isn't drawn at all, so the basemap shows
+// through it. No controls, nodes, popups, or routing
+// (docs/design/map-styles.md, SHARE_STYLE).
 
 const view = document.body.dataset.view;   // 'left' or 'done'
 const $ = (id) => document.getElementById(id);
@@ -10,38 +12,36 @@ const $ = (id) => document.getElementById(id);
 const map = L.map('map', { preferCanvas: true, zoomControl: false, zoomSnap: 0.25 }).setView([33.39, -84.57], 13);
 basemap(map);
 
-// Per layer and state: [colour token, weight, loud]. Excluded and uncounted
-// segments aren't drawn.
+// Per layer, the one state that draws: [colour token, weight]. Cart path and
+// road share a color; every other state (including excluded and uncounted)
+// isn't drawn.
 const SHARE_STYLE = {
   left: {
-    cartpath: { not_run: ['--map-cartpath-not-run', 4.5, true],
-      run: ['--map-share-ghost', 1.5], complete: ['--map-share-ghost', 1.5] },
-    road: { not_run: ['--map-share-road', 2.5, true], run: ['--map-share-ghost', 1.5] },
+    cartpath: { not_run: ['--map-cartpath-not-run', 2] },
+    road: { not_run: ['--map-cartpath-not-run', 2] },
   },
   done: {
-    cartpath: { complete: ['--map-share-done', 3.5, true], run: ['--map-share-done', 3.5, true],
-      not_run: ['--map-share-ghost-left', 2] },
-    road: { run: ['--map-share-road', 2, true], not_run: ['--map-share-ghost-left', 2] },
+    cartpath: { complete: ['--map-share-done', 2], run: ['--map-share-done', 2] },
+    road: { run: ['--map-share-done', 2] },
   },
 }[view];
 
 const LEGEND = {
-  left: [['--map-cartpath-not-run', 4, 'Cart path left'], ['--map-share-road', 2.5, 'Road left']],
-  done: [['--map-share-done', 3.5, 'Run'], ['--map-share-ghost-left', 2, 'Not yet']],
+  left: [['--map-cartpath-not-run', 2, 'Not yet run']],
+  done: [['--map-share-done', 2, 'Run']],
 }[view];
 
-// Ghosts first so the loud lines draw on top; cart paths above roads.
-const quiet = L.geoJSON(null).addTo(map);
+// Cart paths draw above roads.
 const loud = { road: L.geoJSON(null).addTo(map), cartpath: L.geoJSON(null).addTo(map) };
 
 function draw(layer, fc) {
   for (const f of fc.features) {
     const s = SHARE_STYLE[layer][f.properties.state];
     if (!s) continue;
-    const [colour, weight, isLoud] = s;
+    const [colour, weight] = s;
     const l = L.GeoJSON.geometryToLayer(f);
     l.setStyle({ color: token(colour), weight, opacity: 1, interactive: false });
-    (isLoud ? loud[layer] : quiet).addLayer(l);
+    loud[layer].addLayer(l);
   }
 }
 
@@ -52,7 +52,7 @@ const one = (n) => n.toFixed(1);
     getJson('stats'), getJson('network?layer=cartpath'), getJson('network?layer=road')]);
   draw('road', roads);
   draw('cartpath', cartpaths);
-  const all = L.featureGroup([quiet, loud.cartpath, loud.road]);
+  const all = L.featureGroup([loud.cartpath, loud.road]);
   if (all.getBounds().isValid()) map.fitBounds(all.getBounds(), { padding: [20, 20] });
   // After that, zoom by whole levels like the main map: at quarter levels a
   // scroll took four zoom animations and canvas redraws to go one level.
