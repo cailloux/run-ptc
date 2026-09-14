@@ -194,7 +194,7 @@ def _leave(step: tuple[Unit, bool]) -> int:
     return u.target if fwd else u.source
 
 
-def _two_opt(order: list[tuple[Unit, bool]], home: int, dist) -> None:
+def _two_opt(order: list[tuple[Unit, bool]], home: int, dist) -> bool:
     """Improve a round trip in place by reversing runs of it.
 
     Reversing a run also flips each unit in it, so a run of one is a
@@ -203,6 +203,7 @@ def _two_opt(order: list[tuple[Unit, bool]], home: int, dist) -> None:
     matched the exact optimum (Held-Karp) in most trials and was within 2%
     in the rest, where greedy alone was up to 30% over.
     """
+    changed = False
     improved = True
     while improved:
         improved = False
@@ -214,7 +215,51 @@ def _two_opt(order: list[tuple[Unit, bool]], home: int, dist) -> None:
                 new = dist(before, _leave(order[j])) + dist(_enter(order[i]), after)
                 if new < old - 1e-6:
                     order[i:j + 1] = [(u, not f) for u, f in reversed(order[i:j + 1])]
-                    improved = True
+                    improved = changed = True
+    return changed
+
+
+def _cost(order: list[tuple[Unit, bool]], home: int, dist) -> float:
+    at = home
+    total = 0.0
+    for step in order:
+        total += dist(at, _enter(step))
+        at = _leave(step)
+    return total + dist(at, home)
+
+
+def _or_opt(order: list[tuple[Unit, bool]], home: int, dist) -> bool:
+    """Improve a round trip by moving one unit to a better spot in it.
+
+    2-opt only reverses whole runs, so it can't move a single stop past a
+    same-cost detour to interleave it, which is exactly the shape a branch
+    off the middle of a required street produces. Try every unit at every
+    other position and direction; take the first move that's cheaper.
+
+    ponytail: recomputes the whole route's cost per candidate (O(units^3)
+    a pass) instead of an incremental delta; fine at the segment-picker's
+    scale (up to 150), switch to a delta if picks grow much larger.
+    """
+    changed = False
+    improved = True
+    while improved:
+        improved = False
+        cost = _cost(order, home, dist)
+        for i in range(len(order)):
+            u = order[i][0]
+            rest = order[:i] + order[i + 1:]
+            for j in range(len(rest) + 1):
+                for fwd in (True, False):
+                    candidate = rest[:j] + [(u, fwd)] + rest[j:]
+                    if _cost(candidate, home, dist) < cost - 1e-6:
+                        order[:] = candidate
+                        improved = changed = True
+                        break
+                if improved:
+                    break
+            if improved:
+                break
+    return changed
 
 
 def _vertex_latlng(conn: psycopg.Connection, vid: int) -> LatLng:
@@ -246,7 +291,7 @@ def finish_route(conn: psycopg.Connection, start: LatLng, segment_ids: list[int]
     def dist(s: int, t: int) -> float:
         return 0.0 if s == t else cost.get((s, t), math.inf)
 
-    # Greedy nearest-neighbour order, then 2-opt.
+    # Greedy nearest-neighbour order, then 2-opt and or-opt until neither improves.
     order: list[tuple[Unit, bool]] = []   # (unit, forwards)
     at, left = home, list(todo)
     while left:
@@ -255,7 +300,8 @@ def finish_route(conn: psycopg.Connection, start: LatLng, segment_ids: list[int]
         left.remove(u)
         order.append((u, fwd))
         at = _leave((u, fwd))
-    _two_opt(order, home, dist)
+    while _two_opt(order, home, dist) | _or_opt(order, home, dist):
+        pass
 
     def enter(i: int) -> int:
         return _enter(order[i])
