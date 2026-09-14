@@ -3,11 +3,12 @@ from typing import Literal
 
 import httpx2
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response
+from fastapi.responses import FileResponse
 from psycopg.rows import dict_row
 from pydantic import BaseModel, Field
 
 from app import db, exclusions, health
-from app.config import intervals_credentials, load_settings
+from app.config import ROOT, intervals_credentials, load_settings
 from app.coverage import coverage_geojson
 from app.finish import finish_route, new_miles
 from app.graph import main_component
@@ -89,6 +90,18 @@ def health_check() -> dict:
     with db.connect() as conn:
         conn.execute("SELECT 1")
     return {"status": "ok"}
+
+
+# Clean URLs for the two share pages; the .html paths still work too since
+# they're plain static files (app/main.py mounts app/static/ last).
+@router.get("/left", include_in_schema=False)
+def left_page() -> FileResponse:
+    return FileResponse(ROOT / "app" / "static" / "left.html")
+
+
+@router.get("/progress", include_in_schema=False)
+def progress_page() -> FileResponse:
+    return FileResponse(ROOT / "app" / "static" / "progress.html")
 
 
 @router.get("/network")
