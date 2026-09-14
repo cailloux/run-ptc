@@ -101,7 +101,7 @@
   /* line weights, mirrored in map.js */
   --map-w-cartpath-complete: 2;
   --map-w-cartpath-run: 2.5;
-  --map-w-cartpath-not-run: 5;
+  --map-w-cartpath-not-run: 3;
   --map-w-road-run: 1.5;
   --map-w-road-not-run: 3;
   --map-w-excluded: 2.5;
