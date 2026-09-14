@@ -53,7 +53,10 @@ const one = (n) => n.toFixed(1);
   draw('road', roads);
   draw('cartpath', cartpaths);
   const all = L.featureGroup([loud.cartpath, loud.road]);
-  if (all.getBounds().isValid()) map.fitBounds(all.getBounds(), { padding: [20, 20] });
+  // No animation: the placeholder view is only there so tiles paint before
+  // the data arrives, not something the visitor should see it pan/zoom away
+  // from.
+  if (all.getBounds().isValid()) map.fitBounds(all.getBounds(), { padding: [20, 20], animate: false });
   // After that, zoom by whole levels like the main map: at quarter levels a
   // scroll took four zoom animations and canvas redraws to go one level.
   map.options.zoomSnap = 1;
