@@ -7,11 +7,6 @@
 const view = document.body.dataset.view;   // 'left' or 'done'
 const $ = (id) => document.getElementById(id);
 
-// A fractional zoom lets the first view fit the city to the page; see the
-// fitBounds below for why it's only the first view.
-const map = L.map('map', { preferCanvas: true, zoomControl: false, zoomSnap: 0.25 }).setView([33.39, -84.57], 13);
-basemap(map);
-
 // Per layer, the one state that draws: [colour token, weight]. Cart path and
 // road share a color; every other state (including excluded and uncounted)
 // isn't drawn.
@@ -31,18 +26,20 @@ const LEGEND = {
   done: [['--map-share-done', 2, 'Run']],
 }[view];
 
-// Cart paths draw above roads.
-const loud = { road: L.geoJSON(null).addTo(map), cartpath: L.geoJSON(null).addTo(map) };
-
-function draw(layer, fc) {
+// Styled Leaflet layers for one GeoJSON layer's drawn state, built without
+// a map so their bounds can be known before the map (and its first paint)
+// exists at all.
+function styledLayers(layer, fc) {
+  const out = [];
   for (const f of fc.features) {
     const s = SHARE_STYLE[layer][f.properties.state];
     if (!s) continue;
     const [colour, weight] = s;
     const l = L.GeoJSON.geometryToLayer(f);
     l.setStyle({ color: token(colour), weight, opacity: 1, interactive: false });
-    loud[layer].addLayer(l);
+    out.push(l);
   }
+  return out;
 }
 
 const one = (n) => n.toFixed(1);
@@ -50,16 +47,26 @@ const one = (n) => n.toFixed(1);
 (async () => {
   const [stats, cartpaths, roads] = await Promise.all([
     getJson('stats'), getJson('network?layer=cartpath'), getJson('network?layer=road')]);
-  draw('road', roads);
-  draw('cartpath', cartpaths);
-  const all = L.featureGroup([loud.cartpath, loud.road]);
-  // No animation: the placeholder view is only there so tiles paint before
-  // the data arrives, not something the visitor should see it pan/zoom away
-  // from.
-  if (all.getBounds().isValid()) map.fitBounds(all.getBounds(), { padding: [20, 20], animate: false });
-  // After that, zoom by whole levels like the main map: at quarter levels a
-  // scroll took four zoom animations and canvas redraws to go one level.
+  const roadLayers = styledLayers('road', roads);
+  const cartpathLayers = styledLayers('cartpath', cartpaths);
+
+  // The map isn't created until here, already fitted to what it's about to
+  // show, so there's only one paint and nothing to jump from -- a fixed
+  // placeholder view can't work because the right zoom depends on this
+  // device's viewport.
+  const map = L.map('map', { preferCanvas: true, zoomControl: false, zoomSnap: 0.25 });
+  const bounds = L.featureGroup([...roadLayers, ...cartpathLayers]).getBounds();
+  if (bounds.isValid()) map.fitBounds(bounds, { padding: [20, 20], animate: false });
+  else map.setView([33.39, -84.57], 13);   // nothing drawn on this layer at all
+  basemap(map);
+  // From here on, zoom by whole levels like the main map: at quarter levels
+  // a scroll took four zoom animations and canvas redraws to go one level.
   map.options.zoomSnap = 1;
+
+  // Cart paths draw above roads.
+  const loud = { road: L.geoJSON(null).addTo(map), cartpath: L.geoJSON(null).addTo(map) };
+  roadLayers.forEach((l) => loud.road.addLayer(l));
+  cartpathLayers.forEach((l) => loud.cartpath.addLayer(l));
 
   const c = stats.completion;
   if (view === 'left') {
