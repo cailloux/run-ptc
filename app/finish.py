@@ -154,16 +154,33 @@ def units(conn: psycopg.Connection, segment_ids: list[int]) -> list[Unit]:
                AND least(e.part_to, iv.b) - greatest(e.part_from, iv.a) > 1e-9
         ORDER BY e.segment_id, e.part_idx, e.part_from
     """, {"segments": segment_ids}).fetchall()
-    out: list[Unit] = []
+    chains: list[Unit] = []
     prev_part = None
     for edge_id, segment_id, part_idx, _, source, target, component in rows:
-        if out and prev_part == (segment_id, part_idx) and out[-1].target == source:
-            u = out[-1]
+        if chains and prev_part == (segment_id, part_idx) and chains[-1].target == source:
+            u = chains[-1]
             u.edges.append((edge_id, source, target))
             u.target = target
         else:
-            out.append(Unit([(edge_id, source, target)], source, target, component))
+            chains.append(Unit([(edge_id, source, target)], source, target, component))
         prev_part = (segment_id, part_idx)
+
+    # A vertex where some other unit starts or ends is a junction worth
+    # stopping at: split any chain there too, so the router can detour to
+    # that unit and back without re-walking the rest of this one to get
+    # "official" credit for it (it was forced to walk to the junction
+    # anyway to make the detour, so nothing extra is required by stopping).
+    attach = {v for u in chains for v in (u.source, u.target)}
+    out: list[Unit] = []
+    for u in chains:
+        own = {u.source, u.target}
+        piece, source = [u.edges[0]], u.source
+        for edge_id, s, t in u.edges[1:]:
+            if s in attach and s not in own:
+                out.append(Unit(piece, source, s, u.component))
+                piece, source = [], s
+            piece.append((edge_id, s, t))
+        out.append(Unit(piece, source, u.target, u.component))
     return out
 
 

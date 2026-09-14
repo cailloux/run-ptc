@@ -146,6 +146,23 @@ def test_visits_every_picked_segment(conn):
     assert f.length_m == pytest.approx(100 + 3 * 200 + 100, abs=0.5)
 
 
+def test_a_through_street_splits_at_a_side_branch(conn):
+    # A branch off the middle of a required street should be a stop the
+    # router can use, not force the whole street to be walked as one block.
+    build(conn, [
+        cartpath(1, line((0, 0), (200, 0))),
+        cartpath(2, line((100, 0), (100, 80))),
+    ])
+    found = units(conn, [seg_id(conn, 1), seg_id(conn, 2)])
+    assert len(found) == 3
+    lengths = []
+    for u in found:
+        edge_ids = [e for e, _, _ in u.edges]
+        lengths.append(round(conn.execute(
+            "SELECT sum(length_m) FROM route_edge WHERE id = ANY(%s)", (edge_ids,)).fetchone()[0]))
+    assert sorted(lengths) == [80, 100, 100]   # not [80, 200]: the street isn't one block
+
+
 def test_order_beats_greedy(conn):
     # One line along the x axis in pieces; three short pieces are unrun:
     # -25..-15, 10..20, and 100..110. From 0, greedy takes 10..20, then
