@@ -146,6 +146,47 @@ def test_visits_every_picked_segment(conn):
     assert f.length_m == pytest.approx(100 + 3 * 200 + 100, abs=0.5)
 
 
+def test_a_through_street_splits_at_a_side_branch(conn):
+    # A branch off the middle of a required street should be a stop the
+    # router can use, not force the whole street to be walked as one block.
+    build(conn, [
+        cartpath(1, line((0, 0), (200, 0))),
+        cartpath(2, line((100, 0), (100, 80))),
+    ])
+    found = units(conn, [seg_id(conn, 1), seg_id(conn, 2)])
+    assert len(found) == 3
+    lengths = []
+    for u in found:
+        edge_ids = [e for e, _, _ in u.edges]
+        lengths.append(round(conn.execute(
+            "SELECT sum(length_m) FROM route_edge WHERE id = ANY(%s)", (edge_ids,)).fetchone()[0]))
+    assert sorted(lengths) == [80, 100, 100]   # not [80, 200]: the street isn't one block
+
+
+def test_a_side_spur_does_not_require_re_walking_the_through_street(conn):
+    # A through street A-B-C (100 m each half), fully unrun, with a dead-end
+    # spur off its middle (B), plus a shortcut road (already run) from home
+    # straight to C that's shorter than looping back through B and A. If the
+    # through street can only be entered/exited at A or C, reaching the spur
+    # at B forces a detour back through the just-run B-C stretch and, since
+    # that's cheaper than the shortcut, the algorithm takes it: A-B-spur-B-C
+    # walked, then B-C retraced to reach B, then out and back on the spur,
+    # then A-B walked again to get home. Splitting the through street at B
+    # removes that: A-B, spur, B-C, then the shortcut home, once each.
+    build(conn, [
+        cartpath(1, line((0, 0), (200, 0))),          # through street A-B-C
+        cartpath(2, line((100, 0), (100, 80))),        # dead-end spur off B
+        cartpath(3, line((0, 0), (0, -30))),           # home-A, already run
+        cartpath(4, line((0, -30), (200, 0))),         # home-C shortcut, already run
+    ])
+    for oid in (3, 4):
+        hit(conn, oid, range(20))
+    f = finish(conn, (0, -30), [1, 2])
+    # home->A (30) + A-B (100) + spur out and back (160) + B-C (100)
+    # + C->home (the direct shortcut, sqrt(200**2 + 30**2) =~ 202.24).
+    assert f.length_m == pytest.approx(592.24, abs=1)
+
+
 def test_order_beats_greedy(conn):
     # One line along the x axis in pieces; three short pieces are unrun:
     # -25..-15, 10..20, and 100..110. From 0, greedy takes 10..20, then

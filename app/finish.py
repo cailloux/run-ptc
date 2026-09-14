@@ -154,16 +154,33 @@ def units(conn: psycopg.Connection, segment_ids: list[int]) -> list[Unit]:
                AND least(e.part_to, iv.b) - greatest(e.part_from, iv.a) > 1e-9
         ORDER BY e.segment_id, e.part_idx, e.part_from
     """, {"segments": segment_ids}).fetchall()
-    out: list[Unit] = []
+    chains: list[Unit] = []
     prev_part = None
     for edge_id, segment_id, part_idx, _, source, target, component in rows:
-        if out and prev_part == (segment_id, part_idx) and out[-1].target == source:
-            u = out[-1]
+        if chains and prev_part == (segment_id, part_idx) and chains[-1].target == source:
+            u = chains[-1]
             u.edges.append((edge_id, source, target))
             u.target = target
         else:
-            out.append(Unit([(edge_id, source, target)], source, target, component))
+            chains.append(Unit([(edge_id, source, target)], source, target, component))
         prev_part = (segment_id, part_idx)
+
+    # A vertex where some other unit starts or ends is a junction worth
+    # stopping at: split any chain there too, so the router can detour to
+    # that unit and back without re-walking the rest of this one to get
+    # "official" credit for it (it was forced to walk to the junction
+    # anyway to make the detour, so nothing extra is required by stopping).
+    attach = {v for u in chains for v in (u.source, u.target)}
+    out: list[Unit] = []
+    for u in chains:
+        own = {u.source, u.target}
+        piece, source = [u.edges[0]], u.source
+        for edge_id, s, t in u.edges[1:]:
+            if s in attach and s not in own:
+                out.append(Unit(piece, source, s, u.component))
+                piece, source = [], s
+            piece.append((edge_id, s, t))
+        out.append(Unit(piece, source, u.target, u.component))
     return out
 
 
@@ -177,7 +194,7 @@ def _leave(step: tuple[Unit, bool]) -> int:
     return u.target if fwd else u.source
 
 
-def _two_opt(order: list[tuple[Unit, bool]], home: int, dist) -> None:
+def _two_opt(order: list[tuple[Unit, bool]], home: int, dist) -> bool:
     """Improve a round trip in place by reversing runs of it.
 
     Reversing a run also flips each unit in it, so a run of one is a
@@ -186,6 +203,7 @@ def _two_opt(order: list[tuple[Unit, bool]], home: int, dist) -> None:
     matched the exact optimum (Held-Karp) in most trials and was within 2%
     in the rest, where greedy alone was up to 30% over.
     """
+    changed = False
     improved = True
     while improved:
         improved = False
@@ -197,7 +215,51 @@ def _two_opt(order: list[tuple[Unit, bool]], home: int, dist) -> None:
                 new = dist(before, _leave(order[j])) + dist(_enter(order[i]), after)
                 if new < old - 1e-6:
                     order[i:j + 1] = [(u, not f) for u, f in reversed(order[i:j + 1])]
-                    improved = True
+                    improved = changed = True
+    return changed
+
+
+def _cost(order: list[tuple[Unit, bool]], home: int, dist) -> float:
+    at = home
+    total = 0.0
+    for step in order:
+        total += dist(at, _enter(step))
+        at = _leave(step)
+    return total + dist(at, home)
+
+
+def _or_opt(order: list[tuple[Unit, bool]], home: int, dist) -> bool:
+    """Improve a round trip by moving one unit to a better spot in it.
+
+    2-opt only reverses whole runs, so it can't move a single stop past a
+    same-cost detour to interleave it, which is exactly the shape a branch
+    off the middle of a required street produces. Try every unit at every
+    other position and direction; take the first move that's cheaper.
+
+    ponytail: recomputes the whole route's cost per candidate (O(units^3)
+    a pass) instead of an incremental delta; fine at the segment-picker's
+    scale (up to 150), switch to a delta if picks grow much larger.
+    """
+    changed = False
+    improved = True
+    while improved:
+        improved = False
+        cost = _cost(order, home, dist)
+        for i in range(len(order)):
+            u = order[i][0]
+            rest = order[:i] + order[i + 1:]
+            for j in range(len(rest) + 1):
+                for fwd in (True, False):
+                    candidate = rest[:j] + [(u, fwd)] + rest[j:]
+                    if _cost(candidate, home, dist) < cost - 1e-6:
+                        order[:] = candidate
+                        improved = changed = True
+                        break
+                if improved:
+                    break
+            if improved:
+                break
+    return changed
 
 
 def _vertex_latlng(conn: psycopg.Connection, vid: int) -> LatLng:
@@ -229,7 +291,7 @@ def finish_route(conn: psycopg.Connection, start: LatLng, segment_ids: list[int]
     def dist(s: int, t: int) -> float:
         return 0.0 if s == t else cost.get((s, t), math.inf)
 
-    # Greedy nearest-neighbour order, then 2-opt.
+    # Greedy nearest-neighbour order, then 2-opt and or-opt until neither improves.
     order: list[tuple[Unit, bool]] = []   # (unit, forwards)
     at, left = home, list(todo)
     while left:
@@ -238,7 +300,8 @@ def finish_route(conn: psycopg.Connection, start: LatLng, segment_ids: list[int]
         left.remove(u)
         order.append((u, fwd))
         at = _leave((u, fwd))
-    _two_opt(order, home, dist)
+    while _two_opt(order, home, dist) | _or_opt(order, home, dist):
+        pass
 
     def enter(i: int) -> int:
         return _enter(order[i])
