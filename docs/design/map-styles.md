@@ -10,7 +10,7 @@ const STATE_STYLE = {
   cartpath: {
     complete: { color: '#6b6862', weight: 2,   opacity: 1 },   // changed: #199e70 / 2.5
     run:      { color: '#34332f', weight: 2.5, opacity: 1 },   // changed: #1c5cab
-    not_run:  { color: '#ff3b1f', weight: 5,   opacity: 1 },   // changed: #d95926 / 4
+    not_run:  { color: '#ff3b1f', weight: 3,   opacity: 1 },   // changed: #d95926 / 4 / 5 -- now matches road not_run's weight
   },
   road: {
     run:      { color: '#c4c1ba', weight: 1.5, opacity: 1 },   // changed: #5598e7

@@ -1,5 +1,7 @@
+// Tiles aren't added until startup has fit the real bounds (below): a fixed
+// placeholder view can't match every device's viewport, so painting tiles
+// against it just means jumping away from them once the real fit is known.
 const map = L.map('map', { preferCanvas: true }).setView([33.39, -84.57], 13);
-basemap(map);
 
 const NODE_MIN_ZOOM = 15;
 const SYNC_POLL_MS = 3000;
@@ -526,13 +528,18 @@ function showLoadError(err) {
   }).catch(showLoadError);
 
   await Promise.all([loadNetwork('road'), loadNetwork('cartpath'), loadStats()]);
+
+  // Fit first, then paint: nothing shows (not even tiles) until the view is
+  // already correct, so there's exactly one paint and no jump to see.
+  const bounds = L.featureGroup(COVERAGE_ORDER.filter((k) => k.startsWith('cartpath'))
+    .map((k) => COVERAGE[k])).getBounds();
+  if (bounds.isValid()) map.fitBounds(bounds, { animate: false });
+  basemap(map);
+
   document.querySelectorAll('#legend input[data-layer]').forEach((input) => {
     if (input.checked) map.addLayer(LAYERS[input.dataset.layer]);
   });
   restack();
-  const bounds = L.featureGroup(COVERAGE_ORDER.filter((k) => k.startsWith('cartpath'))
-    .map((k) => COVERAGE[k])).getBounds();
-  if (bounds.isValid()) map.fitBounds(bounds);
 
   const changeData = await changesLoaded;
   changes.addData(changeData);
