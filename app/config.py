@@ -1,9 +1,12 @@
+import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from datetime import date
 from pathlib import Path
 
 import yaml
+
+log = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_DIR = ROOT / "config"
@@ -40,7 +43,15 @@ def load_settings(path: Path = CONFIG_DIR / "settings.yaml") -> Settings:
         data[key] = tuple(data[key])
     if isinstance(data.get("sync_backfill_start"), str):
         data["sync_backfill_start"] = date.fromisoformat(data["sync_backfill_start"])
-    # Unknown or missing keys raise TypeError, so typos fail loudly.
+    # A missing key still raises TypeError, so a typo'd field name fails
+    # loudly. An unknown key only warns: settings.yaml is shared across
+    # environments running different code versions, and a key the current
+    # code doesn't know about yet (or anymore) shouldn't take the app down.
+    known = {f.name for f in fields(Settings)}
+    extra = data.keys() - known
+    if extra:
+        log.warning("settings.yaml: ignoring unknown keys: %s", sorted(extra))
+        data = {k: v for k, v in data.items() if k in known}
     return Settings(**data)
 
 
