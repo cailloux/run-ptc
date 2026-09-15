@@ -1,6 +1,8 @@
 import math
 
-from tests.helpers import cartpath, line, nodes_of, run_import, segment
+from app import exclusions as excl
+from tests.helpers import cartpath, global_id, line, nodes_of, run_import, segment
+from tests.test_api_sync import api  # noqa: F401  (fixture)
 
 
 def xs(nodes):
@@ -74,3 +76,15 @@ def test_counted_segment_made_only_of_tiny_parts_is_reported(conn):
         *[line((i * 10, 0), (i * 10 + 0.5, 0)) for i in range(4)],   # 4 x 0.5 m = 2 m total
     )])
     assert report.nodeless == [1]
+
+
+def test_excluded_segments_nodes_are_dropped_from_the_map(api, conn):
+    client, _ = api
+    run_import(conn, "cartpath", [cartpath(1, line((0, 0), (100, 0)))])
+    gid = global_id(1).strip("{}").lower()
+    excl.apply(conn, excl.parse({"cartpaths": [{"global_id": gid, "reason": "Gated off"}]}))
+    assert segment(conn, 1)["excluded"] is True
+    assert len(nodes_of(conn, 1)) == 6   # still stored; only the map hides them
+
+    features = client.get("/nodes?layer=cartpath").json()["features"]
+    assert features == []

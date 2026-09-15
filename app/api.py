@@ -107,9 +107,8 @@ def progress_page() -> FileResponse:
 @router.get("/network")
 def network(layer: LayerName) -> Response:
     """Segments with coverage state per run of node intervals (see app/coverage.py)."""
-    spacing_m = load_settings().node_spacing_m
     with db.connect() as conn:
-        body = coverage_geojson(conn, layer, spacing_m)
+        body = coverage_geojson(conn, layer)
     return Response(body, media_type="application/geo+json")
 
 
@@ -124,7 +123,7 @@ def nodes(layer: LayerName, status: Literal["hit", "missed"] | None = None) -> R
                 'properties', json_build_object('id', n.id, 'hit', n.hit_at IS NOT NULL)
             ) ORDER BY n.id), '[]'::json))::text
         FROM node n JOIN segment s ON s.id = n.segment_id
-        WHERE s.layer = %(layer)s
+        WHERE s.layer = %(layer)s AND NOT s.excluded
           AND (%(status)s::text IS NULL OR (n.hit_at IS NOT NULL) = (%(status)s = 'hit'))
     """, {"layer": layer, "status": status})
 

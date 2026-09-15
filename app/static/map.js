@@ -89,19 +89,13 @@ function segmentPopup(f, layer) {
   ];
   if (p.nodes_total) rows.push(['Nodes hit', `${p.nodes_hit} of ${p.nodes_total}`]);
   if (p.state === 'excluded') rows.push(['Excluded', escapeHtml(p.exclusion_reason ?? '')]);
-  else if (p.uncounted_reason && p.uncounted_reason !== 'second carriageway') {
-    rows.push(['Not counted', escapeHtml(p.uncounted_reason)]);
-  }
+  else if (p.uncounted_reason) rows.push(['Not counted', escapeHtml(p.uncounted_reason)]);
   if (p.changed_at) {
     rows.push([`City ${p.city_change === 'added' ? 'added' : 'changed'}`,
       escapeHtml(formatEastern(p.changed_at, { dateStyle: 'medium' }))]);
   }
-  let title = STATE_LABEL[p.state];
-  let note = ['run', 'not_run'].includes(p.state) ? `this piece, ${p.length_m} m` : '';
-  if (p.uncounted_reason === 'second carriageway') {
-    title = 'Second carriageway';
-    note = 'shows the other side\'s coverage';
-  }
+  const title = STATE_LABEL[p.state];
+  const note = ['run', 'not_run'].includes(p.state) ? `this piece, ${p.length_m} m` : '';
   return popupHtml({ swatch: lineSwatch(stateStyle(layer, p.state)), title, note, rows });
 }
 

@@ -39,7 +39,7 @@ The raw layers need four corrections before anything is counted:
 - **Lengths.** Every length is computed from geometry. Never read the city's length attributes (`LengthMile`, `LENGTH`, `Length`, `Shape.STLength()`). They're null, zero, or in other units on many features; the original 263 mi road figure came from one of them.
 - **Outside the city.** The road layer includes 6 features outside Peachtree City (`City` is TYRONE, SENOIA, or Unknown). They're imported with `counted = false`, so they're usable for routing but don't count. This is a data rule, not an exclusion.
 
-- **Divided roads.** SR-74 (N and S), SR-54, N and S Peachtree Pkwy, and MacDuff Pkwy (`divided_roads` in settings) are drawn as two carriageways 12–16 m apart. Only one carriageway counts: a segment lying at least 80% within 40 m of an already-kept segment of the same road, which it doesn't touch, is its twin. Longest chains of touching segments go first, so where the carriageways are separate chains one whole side is kept; MacDuff's connect, so it's paired segment by segment. Twins get `counted = false` with `uncounted_reason = 'second carriageway'`, keep no nodes, stay routable, and on the map show the kept side's coverage (each point borrows the nearest counted node's status). The kept side gets the wide match radius so running the far sidewalk still completes it. As of Sept 2026 this marks 104 segments, 20.6 mi.
+- **Divided roads.** SR-74 (N and S), SR-54, N and S Peachtree Pkwy, and MacDuff Pkwy (`divided_roads` in settings) are drawn as two carriageways 12–16 m apart. Only one carriageway counts: a segment lying at least 80% within 40 m of an already-kept segment of the same road, which it doesn't touch, is its twin. Longest chains of touching segments go first, so where the carriageways are separate chains one whole side is kept; MacDuff's connect, so it's paired segment by segment. Twins get `counted = false` with `uncounted_reason = 'second carriageway'`, keep no nodes, stay routable, and don't appear on the map at all — only the kept side's line and nodes show. The kept side gets the wide match radius so running the far sidewalk still completes it. As of Sept 2026 this marks 104 segments, 20.6 mi.
 
 After clean-up: 1,528 cart path features stored (780 counted, 103.6 mi) and 2,500 roads stored (2,392 counted, 248.5 mi). Totals measured in UTM may differ by about 0.1 mi. Every uncounted segment records why in `uncounted_reason`: `type`, `outside city`, or `second carriageway`.
 
@@ -264,7 +264,7 @@ As built:
 
 ### Phase 8: UI design and polish
 
-One holistic design pass over the whole UI once every feature is in place, instead of styling each phase piecemeal: layout (a fixed sidebar was deferred from Phase 4), typography, the coverage palette in context, legend and layer controls, and the route builder's controls. Also consider collapsing each divided road to a single line on the map (a centerline between the carriageways) for both coverage and nodes; today both carriageways show the kept side's coverage and nodes sit on the kept side.
+One holistic design pass over the whole UI once every feature is in place, instead of styling each phase piecemeal: layout (a fixed sidebar was deferred from Phase 4), typography, the coverage palette in context, legend and layer controls, and the route builder's controls.
 
 As built, from the Claude Design artifacts in `docs/design/` (direction 1b, palette B "Graphite"):
 
@@ -284,7 +284,6 @@ Designed or discussed but not built:
 
 - **Elevation profile** under the map while planning, with gain and loss. Needs an elevation source (e.g. a USGS DEM loaded into PostGIS).
 - **FIT course export** next to GPX, with turn cues only at real junctions, so the watch stops prompting turns on winding paths. Specced in [docs/specs/fit-course-export.md](specs/fit-course-export.md); starts with a test course on the Forerunner 955.
-- **Divided roads as one centerline** on the map, for coverage and nodes; today both carriageways show the kept side's coverage and nodes sit on the kept side.
 
 ## Tunable defaults
 
