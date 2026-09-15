@@ -67,19 +67,7 @@ def test_reimport_is_idempotent(conn):
     assert report.second_carriageways == [11]
 
 
-def test_the_second_carriageway_shows_the_kept_sides_coverage(conn):
+def test_the_second_carriageway_has_no_coverage_feature(conn):
     carriageways(conn)
     set_hits(conn, "road", 10, [(0, s) for s in range(6)])   # x = 0 ... 100 run
-    assert pieces(conn, "road", 11) == [("run", 100.0), ("not_run", 100.0)]
-
-
-def test_second_carriageway_far_from_any_counted_node_stays_gray(conn):
-    # Equal lengths, so road 10 is kept; road 11 is shifted 40 m west, so its
-    # last sample (x = -40) is 42.7 m from the nearest kept node at x = 0.
-    run_import(conn, "road", [
-        road(10, line((0, 0), (240, 0)), name="DIVIDED RD"),
-        road(11, line((200, 15), (-40, 15)), name="DIVIDED RD"),
-    ])
-    assert seg(conn, 11)[1] == "second carriageway"
-    set_hits(conn, "road", 10, [(0, s) for s in range(13)])
-    assert pieces(conn, "road", 11) == [("uncounted", 20.0), ("run", 220.0)]
+    assert pieces(conn, "road", 11) == []
