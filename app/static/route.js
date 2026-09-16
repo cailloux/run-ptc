@@ -14,8 +14,10 @@
   const messageEl = $('route-message');
   const buttons = {
     undo: $('route-undo'), redo: $('route-redo'), retrace: $('route-retrace'),
-    finish: $('route-finish'), build: $('route-build'), clear: $('route-clear'), exportGpx: $('route-export'),
+    finish: $('route-finish'), build: $('route-build'), clear: $('route-clear'),
+    exportGpx: $('route-export-gpx'), exportFit: $('route-export'), exportGarmin: $('route-export-garmin'),
   };
+  const exportMenu = $('route-export-menu');
   const newChip = $('route-new');
 
   // The route is a list of stops. The first is the start; each later stop
@@ -135,6 +137,8 @@
     buttons.redo.disabled = busy || !redoStack.length;
     buttons.retrace.disabled = busy || pts.length < 2;
     buttons.exportGpx.disabled = busy || pts.length < 2;
+    buttons.exportFit.disabled = busy || pts.length < 2;
+    buttons.exportGarmin.disabled = busy || pts.length < 2;
     buttons.clear.disabled = busy || !state.stops.length;
     buttons.finish.disabled = busy;
     buttons.finish.setAttribute('aria-pressed', String(picking));
@@ -196,6 +200,17 @@
   const postJson = (url, body) => getJson(url, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   });
+
+  async function postFile(url, body) {
+    const resp = await fetch(url, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      const detail = await resp.json().catch(() => ({}));
+      throw new Error(detail.detail ?? `${url}: ${resp.status}`);
+    }
+    return resp.blob();
+  }
   const ll = (p) => ({ lat: p[0], lon: p[1] });
 
   async function snapTo(latlng) {
@@ -471,7 +486,25 @@
     });
   }
 
-  // ---- GPX ---------------------------------------------------------------
+  // ---- GPX / FIT export ----------------------------------------------------
+
+  // en-CA formats as YYYY-MM-DD.
+  function courseName() {
+    const miles = (totalMeters() / METERS_PER_MILE).toFixed(2);
+    const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
+    return { day, miles, name: `Run PTC ${day} ${miles} mi` };
+  }
+
+  function download(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
 
   function gpx(name, pts) {
     return [
@@ -492,18 +525,24 @@
   function exportGpx() {
     const pts = points();
     if (pts.length < 2) return;
-    const miles = (totalMeters() / METERS_PER_MILE).toFixed(2);
-    // en-CA formats as YYYY-MM-DD.
-    const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
-    const url = URL.createObjectURL(
-      new Blob([gpx(`Run PTC ${day} ${miles} mi`, pts)], { type: 'application/gpx+xml' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `run-ptc-${day}-${miles}mi.gpx`;
-    document.body.append(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    const { day, miles, name } = courseName();
+    download(new Blob([gpx(name, pts)], { type: 'application/gpx+xml' }), `run-ptc-${day}-${miles}mi.gpx`);
+  }
+
+  // "generic" (default) is what Garmin Connect Web keeps on import; "garmin"
+  // carries the real turn types, for side-loading onto a device directly.
+  async function exportFit(flavor) {
+    const pts = points();
+    if (pts.length < 2) return;
+    const { day, miles, name } = courseName();
+    let blob;
+    try {
+      blob = await postFile('route/fit', { name, latlngs: pts, flavor });
+    } catch (err) {
+      say(err.message, true);
+      return;
+    }
+    download(blob, `run-ptc-${day}-${miles}mi${flavor === 'garmin' ? '-garmin' : ''}.fit`);
   }
 
   // ---- controls ------------------------------------------------------------
@@ -541,6 +580,11 @@
   buttons.finish.addEventListener('click', () => { if (!busy) setPicking(!picking); });
   buttons.build.addEventListener('click', () => { if (picks.size && !busy) build(); });
   buttons.exportGpx.addEventListener('click', exportGpx);
+  buttons.exportFit.addEventListener('click', () => exportFit('generic'));
+  buttons.exportGarmin.addEventListener('click', () => {
+    exportMenu.open = false;
+    exportFit('garmin');
+  });
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && routeMode && !e.target.closest('input, textarea')) {

@@ -71,3 +71,24 @@ route_parallel_road_factor: 3
 # older than this. Nightly runs are 24 h apart, so one skipped night stays
 # quiet and a second one alerts. (A failed run alerts right away.)
 stale_after_hours: 36
+
+# FIT course export: turn classification (docs/specs/fit-course-export.md).
+# Angle thresholds in degrees; below "straight" is a decision point passed
+# straight through, above "sharp" is a retrace turnaround.
+fit_turn_thresholds_deg: {straight: 20, slight: 45, turn: 135, sharp: 170}
+# Bearings are measured over this many meters before/after a junction, so
+# snap jitter and tiny zig-zags don't count as turns.
+fit_bearing_window_m: 15
+# Whether a junction the route passes straight through gets a "straight"
+# cue: ambiguous (only when another branch leaves close enough to be
+# mistaken for it), all, or none.
+fit_straight_cues: ambiguous
+# Decision points directly joined by an edge no longer than this are one
+# cue, not several: real intersections are sometimes digitized as multiple
+# graph vertices linked by a short connector (a crosswalk, a curb cut).
+# Topology, not route distance, so two separate intersections that happen
+# to sit close together on the route never merge into one.
+fit_cluster_m: 20
+# Nominal pace used to synthesize record timestamps (the watch's virtual
+# partner reads these); doesn't affect the route itself.
+fit_course_pace_min_per_mi: 9.0

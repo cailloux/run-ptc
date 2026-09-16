@@ -11,6 +11,7 @@ from app import db, exclusions, health
 from app.config import ROOT, intervals_credentials, load_settings
 from app.coverage import coverage_geojson
 from app.finish import finish_route, new_miles
+from app.fit import encode_course, find_course_points
 from app.graph import main_component
 from app.intervals import IntervalsClient
 from app.jobs import JobBusy, start_job
@@ -41,6 +42,12 @@ class CoverageRequest(BaseModel):
 class FinishRequest(BaseModel):
     start: LatLon
     segment_ids: list[int] = Field(min_length=1, max_length=150)   # as route.js MAX_PICKS
+
+
+class FitRequest(BaseModel):
+    name: str
+    latlngs: list[tuple[float, float]] = Field(min_length=2, max_length=50_000)
+    flavor: Literal["generic", "garmin"] = "generic"
 
 
 def _route_errors(fn):
@@ -219,6 +226,21 @@ def route_finish(body: FinishRequest) -> dict:
         "length_m": round(f.length_m, 1),
         "skipped": f.skipped,
     }
+
+
+@router.post("/route/fit")
+def route_fit(body: FitRequest) -> Response:
+    """The route as a FIT course, with turn cues at real decision points
+    only. flavor "generic" (default) is what Garmin Connect Web keeps on
+    import; "garmin" carries the real turn types, for side-loading."""
+    settings = load_settings()
+    with db.connect() as conn:
+        course_points = find_course_points(conn, body.latlngs, settings)
+    data = encode_course(body.name, body.latlngs, course_points,
+                         pace_min_per_mi=settings.fit_course_pace_min_per_mi,
+                         created_at=int(datetime.now(UTC).timestamp()), flavor=body.flavor)
+    return Response(data, media_type="application/vnd.ant.fit", headers={
+        "Content-Disposition": 'attachment; filename="course.fit"'})
 
 
 @router.get("/graph/islands")

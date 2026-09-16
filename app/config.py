@@ -34,6 +34,11 @@ class Settings:
     divided_roads: tuple[str, ...]
     route_parallel_road_factor: float
     stale_after_hours: float
+    fit_turn_thresholds_deg: dict[str, float]
+    fit_bearing_window_m: float
+    fit_straight_cues: str
+    fit_cluster_m: float
+    fit_course_pace_min_per_mi: float
 
 
 def load_settings(path: Path = CONFIG_DIR / "settings.yaml") -> Settings:
