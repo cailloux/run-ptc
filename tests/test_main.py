@@ -16,7 +16,25 @@ def test_admin_host_is_never_cached_even_on_the_same_path(api):
     assert resp.headers["cache-control"] == "private, no-store"
 
 
-def test_public_host_but_a_non_allowlisted_path_is_never_cached(api):
+def test_public_host_and_a_non_allowlisted_path_404s(api):
     client, _ = api
     resp = client.get("/status", headers={"Host": PUBLIC_HOST})
-    assert resp.headers["cache-control"] == "private, no-store"
+    assert resp.status_code == 404
+
+
+def test_admin_host_reaches_the_same_path_fine(api):
+    client, _ = api
+    resp = client.get("/status", headers={"Host": ADMIN_HOST})
+    assert resp.status_code == 200
+
+
+def test_public_host_and_an_allowlisted_path_is_not_gated(api):
+    client, _ = api
+    resp = client.get("/progress", headers={"Host": PUBLIC_HOST})
+    assert resp.status_code == 200
+
+
+def test_public_host_blocks_a_mutating_admin_endpoint_too(api):
+    client, _ = api
+    resp = client.post("/sync", headers={"Host": PUBLIC_HOST})
+    assert resp.status_code == 404

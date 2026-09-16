@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 
 from app import db, exclusions
 from app.api import default_city_client, default_intervals_client, router
@@ -30,6 +31,22 @@ PUBLIC_CACHE_PATHS = frozenset({
     "/share.js", "/common.js", "/tokens.css", "/style.css",
     "/favicon.svg", "/apple-touch-icon.png",
 })
+
+
+class PublicHostGateMiddleware(BaseHTTPMiddleware):
+    """The public vanity hostnames route straight to this container, the
+    same as admin.runptc.com, but with no Cloudflare Access in front of
+    them -- so unlike admin.runptc.com, nothing else stops a request to
+    one of them from reaching the full admin API. Anything off the public
+    path allowlist 404s outright rather than prompting a login: there's no
+    legitimate reason to reach admin functionality through a hostname
+    meant only for the read-only share pages, and admin.runptc.com already
+    exists for that."""
+
+    async def dispatch(self, request, call_next):
+        if request.url.hostname in PUBLIC_HOSTS and request.url.path not in PUBLIC_CACHE_PATHS:
+            return Response(status_code=404)
+        return await call_next(request)
 
 
 class CacheControlMiddleware(BaseHTTPMiddleware):
@@ -66,6 +83,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Run PTC", lifespan=lifespan)
 # /network is ~1.4-1.8 MB of GeoJSON per layer and compresses about 6x. Level 5
 # takes ~25 ms; the default 9 takes 3-4x as long for ~3% less.
+app.add_middleware(PublicHostGateMiddleware)
 app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=5)
 app.add_middleware(CacheControlMiddleware)
 # Tests swap these for fakes so POST /sync and /refresh never touch the network.
