@@ -132,6 +132,8 @@ button, input { font: inherit; }
   border: 1px solid var(--color-border-dark); box-shadow: var(--shadow-md);
 }
 .split-menu .btn { width: 100%; }
+#route-export-menu > summary::before { content: '▾'; transform: none; }
+#route-export-menu[open] > summary::before { transform: rotate(180deg); }
 #route-message { font-size: var(--text-small); color: #b3afa6; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #route-message.error { color: #ffb4ab; }
 
@@ -295,8 +297,8 @@ button, input { font: inherit; }
 @media (prefers-reduced-motion: reduce) { .card .progress i { animation: none; width: 100%; } }
 details summary { cursor: pointer; list-style: none; }
 details summary::-webkit-details-marker { display: none; }
-details summary::before { content: '▾'; display: inline-block; width: 1em; color: var(--color-text-faint); transition: transform var(--dur-fast); }
-details[open] summary::before { transform: rotate(180deg); }
+details summary::before { content: '▸'; display: inline-block; width: 1em; color: var(--color-text-faint); transition: transform var(--dur-fast); }
+details[open] summary::before { transform: rotate(90deg); }
 #jobs td, #episodes td { white-space: nowrap; }
 #jobs td.result, #episodes td.wrap { white-space: normal; overflow-wrap: anywhere; }
 #jobs tr.live td { background: #f7faff; }

@@ -13,6 +13,8 @@ from dataclasses import dataclass
 
 import psycopg
 
+from app.routing import point_expr
+
 FIT_EPOCH = 631065600   # Unix seconds at 1989-12-31T00:00:00Z, the FIT epoch
 SEMICIRCLE = 2 ** 31 / 180   # degrees -> semicircles
 
@@ -70,11 +72,16 @@ def _bearing_over(latlngs: list[LatLng], idx: int, step: int, window_m: float) -
     return _bearing(latlngs[idx], latlngs[j]) if step > 0 else _bearing(latlngs[j], latlngs[idx])
 
 
+def _angle_diff(a: float, b: float) -> float:
+    """a minus b, normalized to -180..180."""
+    return ((a - b + 180) % 360) - 180
+
+
 def turn_angle(latlngs: list[LatLng], idx: int, window_m: float) -> float:
     """Outgoing bearing minus incoming, normalized to -180..180. Negative is left."""
     inc = _bearing_over(latlngs, idx, -1, window_m)
     out = _bearing_over(latlngs, idx, +1, window_m)
-    return ((out - inc + 180) % 360) - 180
+    return _angle_diff(out, inc)
 
 
 def classify_turn(angle: float, thresholds: dict) -> str:
@@ -119,21 +126,20 @@ def _refine(cue: str, out_bearing: float, branch_bearings: list[float], settings
         if settings.fit_straight_cues == "all":
             return "straight"
         for branch in branch_bearings:
-            diff = ((branch - out_bearing + 180) % 360) - 180
+            diff = _angle_diff(branch, out_bearing)
             if abs(diff) <= 45:
                 return "straight"
         return None   # unambiguous; no other branch could be mistaken for it
     if cue in ("slight_left", "slight_right"):
         for branch in branch_bearings:
-            diff = ((branch - out_bearing + 180) % 360) - 180
+            diff = _angle_diff(branch, out_bearing)
             if abs(diff) <= 30:
                 return "right_fork" if diff > 0 else "left_fork"
         return cue
     return cue
 
 
-def find_course_points(conn: psycopg.Connection, latlngs: list[LatLng], settings,
-                       snap_m: float = 5) -> list[CoursePoint]:
+def find_course_points(conn: psycopg.Connection, latlngs: list[LatLng], settings) -> list[CoursePoint]:
     """Decision points (graph vertices of degree >= 3) the route passes,
     classified from the line's own bearings, adjusted for other branches at
     the junction (see _refine), one cue per real intersection.
@@ -157,9 +163,9 @@ def find_course_points(conn: psycopg.Connection, latlngs: list[LatLng], settings
     """
     lats = [p[0] for p in latlngs]
     lons = [p[1] for p in latlngs]
-    rows = conn.execute("""
+    rows = conn.execute(f"""
         WITH p AS (
-            SELECT i, ST_Transform(ST_SetSRID(ST_MakePoint(lon, lat), 4326), 32616) AS pt
+            SELECT i, {point_expr("lon", "lat")} AS pt
             FROM unnest(%(lats)s::float8[], %(lons)s::float8[]) WITH ORDINALITY AS t(lat, lon, i)
         )
         SELECT p.i, e.source, e.target, e.layer
@@ -169,7 +175,7 @@ def find_course_points(conn: psycopg.Connection, latlngs: list[LatLng], settings
             WHERE ST_DWithin(re.geom, p.pt, %(snap_m)s) ORDER BY re.geom <-> p.pt LIMIT 1
         ) e
         ORDER BY p.i
-    """, {"lats": lats, "lons": lons, "snap_m": snap_m}).fetchall()
+    """, {"lats": lats, "lons": lons, "snap_m": settings.fit_snap_m}).fetchall()
 
     # (source, target, start_i, end_i, layer), 0-based.
     runs: list[tuple[int, int, int, int, str]] = []
@@ -272,7 +278,7 @@ def find_course_points(conn: psycopg.Connection, latlngs: list[LatLng], settings
         entry_idx, exit_idx = cluster[0][1], cluster[-1][1]
         inc = _bearing_over(latlngs, entry_idx, -1, window)
         out_bearing = _bearing_over(latlngs, exit_idx, +1, window)
-        angle = ((out_bearing - inc + 180) % 360) - 180
+        angle = _angle_diff(out_bearing, inc)
         cue = classify_turn(angle, settings.fit_turn_thresholds_deg)
 
         # Exclude the cluster's own vertices (another physical intersection
@@ -409,41 +415,39 @@ def encode_course(name: str, latlngs: list[LatLng], course_points: list[CoursePo
     total_m = dists[-1]
     total_s = total_m / m_per_s if m_per_s else 0
 
-    body = b""
-    body += _definition(_FILE_ID)
-    body += _data(_FILE_ID, [_FILE_TYPE_COURSE, _MANUFACTURER_DEVELOPMENT, 0, fit_time])
-
-    body += _definition(_COURSE)
-    body += _data(_COURSE, [_SPORT_RUNNING, name])
+    chunks = [_definition(_FILE_ID),
+              _data(_FILE_ID, [_FILE_TYPE_COURSE, _MANUFACTURER_DEVELOPMENT, 0, fit_time]),
+              _definition(_COURSE), _data(_COURSE, [_SPORT_RUNNING, name])]
 
     slat, slon = _semicircles(*latlngs[0])
     elat, elon = _semicircles(*latlngs[-1])
-    body += _definition(_LAP)
-    body += _data(_LAP, [fit_time, _EVENT_TIMER, _EVENT_TYPE_START, fit_time,
-                        slat, slon, elat, elon,
-                        round(total_s * 1000), round(total_s * 1000), round(total_m * 100)])
+    chunks.append(_definition(_LAP))
+    chunks.append(_data(_LAP, [fit_time, _EVENT_TIMER, _EVENT_TYPE_START, fit_time,
+                              slat, slon, elat, elon,
+                              round(total_s * 1000), round(total_s * 1000), round(total_m * 100)]))
 
-    body += _definition(_EVENT)
-    body += _data(_EVENT, [fit_time, _EVENT_TIMER, _EVENT_TYPE_START])
+    chunks.append(_definition(_EVENT))
+    chunks.append(_data(_EVENT, [fit_time, _EVENT_TIMER, _EVENT_TYPE_START]))
 
-    body += _definition(_RECORD)
+    chunks.append(_definition(_RECORD))
     for (lat, lon), dist in zip(latlngs, dists):
         plat, plon = _semicircles(lat, lon)
         ts = fit_time + round(dist / m_per_s) if m_per_s else fit_time
-        body += _data(_RECORD, [ts, plat, plon, round(dist * 100)])
+        chunks.append(_data(_RECORD, [ts, plat, plon, round(dist * 100)]))
 
     if course_points:
-        body += _definition(_COURSE_POINT)
+        chunks.append(_definition(_COURSE_POINT))
         for cp in course_points:
             plat, plon = _semicircles(cp.lat, cp.lon)
             ts = fit_time + round(cp.distance_m / m_per_s) if m_per_s else fit_time
             cue_type = CUE_TYPE["generic"] if flavor == "generic" else CUE_TYPE[cp.type]
-            body += _data(_COURSE_POINT, [ts, plat, plon, round(cp.distance_m * 100),
-                                          cue_type, cp.name])
+            chunks.append(_data(_COURSE_POINT, [ts, plat, plon, round(cp.distance_m * 100),
+                                               cue_type, cp.name]))
 
-    body += _definition(_EVENT)
-    body += _data(_EVENT, [fit_time + round(total_s), _EVENT_TIMER, _EVENT_TYPE_STOP_ALL])
+    chunks.append(_definition(_EVENT))
+    chunks.append(_data(_EVENT, [fit_time + round(total_s), _EVENT_TIMER, _EVENT_TYPE_STOP_ALL]))
 
+    body = b"".join(chunks)
     header = struct.pack("<BBHI4s", 14, 0x10, 2149, len(body), b".FIT")
     header += struct.pack("<H", _crc16(header))
     return header + body + struct.pack("<H", _crc16(body, _crc16(header)))

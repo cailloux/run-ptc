@@ -201,16 +201,9 @@
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   });
 
-  async function postFile(url, body) {
-    const resp = await fetch(url, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-    });
-    if (!resp.ok) {
-      const detail = await resp.json().catch(() => ({}));
-      throw new Error(detail.detail ?? `${url}: ${resp.status}`);
-    }
-    return resp.blob();
-  }
+  const postFile = (url, body) => getJson(url, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  }, (r) => r.blob());
   const ll = (p) => ({ lat: p[0], lon: p[1] });
 
   async function snapTo(latlng) {

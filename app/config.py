@@ -39,6 +39,7 @@ class Settings:
     fit_straight_cues: str
     fit_cluster_m: float
     fit_course_pace_min_per_mi: float
+    fit_snap_m: float
 
 
 def load_settings(path: Path = CONFIG_DIR / "settings.yaml") -> Settings:

@@ -92,3 +92,6 @@ fit_cluster_m: 20
 # Nominal pace used to synthesize record timestamps (the watch's virtual
 # partner reads these); doesn't affect the route itself.
 fit_course_pace_min_per_mi: 9.0
+# How far a route point may be from a route_edge and still snap onto it when
+# re-deriving decision points for FIT export (app/fit.py: find_course_points).
+fit_snap_m: 5

@@ -11,8 +11,14 @@ import psycopg
 
 EDGES_SQL = "SELECT id, source, target, cost, reverse_cost FROM route_edge"
 
+
+def point_expr(lon: str = "%(lon)s", lat: str = "%(lat)s") -> str:
+    """SQL transforming a lon/lat pair (params or column refs) into the graph's SRID."""
+    return f"ST_Transform(ST_SetSRID(ST_MakePoint({lon}, {lat}), 4326), 32616)"
+
+
 # A click's position in the graph's SRID.
-_POINT = "ST_Transform(ST_SetSRID(ST_MakePoint(%(lon)s, %(lat)s), 4326), 32616)"
+_POINT = point_expr()
 
 
 class RouteError(ValueError):

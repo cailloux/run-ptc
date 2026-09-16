@@ -34,6 +34,7 @@ SETTINGS = Settings(
     fit_straight_cues="ambiguous",
     fit_cluster_m=20,
     fit_course_pace_min_per_mi=9.0,
+    fit_snap_m=5,
 )
 
 

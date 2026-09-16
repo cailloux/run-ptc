@@ -11,13 +11,13 @@ function formatEastern(iso, opts = { dateStyle: 'medium', timeStyle: 'short' }) 
   return new Date(iso).toLocaleString('en-US', { timeZone: 'America/New_York', ...opts });
 }
 
-async function getJson(url, options) {
+async function getJson(url, options, parse = (r) => r.json()) {
   const resp = await fetch(url, options);
   if (!resp.ok) {
     const body = await resp.json().catch(() => ({}));
     throw new Error(body.detail ?? `${url}: ${resp.status}`);
   }
-  return resp.json();
+  return parse(resp);
 }
 
 // An error's first line, without the request URL httpx2 appends (app/health.py brief()).
