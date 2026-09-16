@@ -77,6 +77,14 @@ def _angle_diff(a: float, b: float) -> float:
     return ((a - b + 180) % 360) - 180
 
 
+def cumulative_m(latlngs: list[LatLng]) -> list[float]:
+    """Running distance in meters at each point, starting at 0."""
+    cum = [0.0]
+    for a, b in zip(latlngs, latlngs[1:]):
+        cum.append(cum[-1] + _haversine_m(a, b))
+    return cum
+
+
 def turn_angle(latlngs: list[LatLng], idx: int, window_m: float) -> float:
     """Outgoing bearing minus incoming, normalized to -180..180. Negative is left."""
     inc = _bearing_over(latlngs, idx, -1, window_m)
@@ -139,7 +147,8 @@ def _refine(cue: str, out_bearing: float, branch_bearings: list[float], settings
     return cue
 
 
-def find_course_points(conn: psycopg.Connection, latlngs: list[LatLng], settings) -> list[CoursePoint]:
+def find_course_points(conn: psycopg.Connection, latlngs: list[LatLng], settings,
+                       cum_m: list[float] | None = None) -> list[CoursePoint]:
     """Decision points (graph vertices of degree >= 3) the route passes,
     classified from the line's own bearings, adjusted for other branches at
     the junction (see _refine), one cue per real intersection.
@@ -226,9 +235,7 @@ def find_course_points(conn: psycopg.Connection, latlngs: list[LatLng], settings
     if not decisions:
         return []
 
-    cum = [0.0]
-    for a, b in zip(latlngs, latlngs[1:]):
-        cum.append(cum[-1] + _haversine_m(a, b))
+    cum = cum_m if cum_m is not None else cumulative_m(latlngs)
 
     # Decision vertices directly joined by a short edge are one physical
     # intersection (a crosswalk, a short connector splitting what's really
@@ -394,7 +401,8 @@ def _semicircles(lat: float, lon: float) -> tuple[int, int]:
 
 
 def encode_course(name: str, latlngs: list[LatLng], course_points: list[CoursePoint],
-                  pace_min_per_mi: float, created_at: int, flavor: str = "generic") -> bytes:
+                  pace_min_per_mi: float, created_at: int, flavor: str = "generic",
+                  cum_m: list[float] | None = None) -> bytes:
     """A FIT course file: file_id, course, lap, event(start), one record per
     point, one course_point per cue, event(stop). created_at is a Unix
     timestamp; record timestamps are synthesized from it at a nominal pace.
@@ -409,9 +417,7 @@ def encode_course(name: str, latlngs: list[LatLng], course_points: list[CoursePo
     m_per_s = meters_per_mi / (pace_min_per_mi * 60)
     fit_time = created_at - FIT_EPOCH
 
-    dists = [0.0]
-    for a, b in zip(latlngs, latlngs[1:]):
-        dists.append(dists[-1] + _haversine_m(a, b))
+    dists = cum_m if cum_m is not None else cumulative_m(latlngs)
     total_m = dists[-1]
     total_s = total_m / m_per_s if m_per_s else 0
 
