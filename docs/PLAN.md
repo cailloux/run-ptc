@@ -278,12 +278,22 @@ As built, from the Claude Design artifacts in `docs/design/` (direction 1b, pale
 
 Each phase can be verified on the map before the next builds on it. Routing comes last because it doesn't depend on coverage, and graph topology is the fiddliest part to get right.
 
+### FIT course export (built after Phase 8)
+
+Not a numbered phase -- built from the "Later" list below after shipping to fill a real gap: GPX export gives the watch no turn information, so it guesses turns on winding cart paths and prompts ones that aren't real.
+
+As built, specced in [docs/specs/fit-course-export.md](specs/fit-course-export.md):
+
+- `app/fit.py` re-derives the route's decision points (graph vertices of degree >= 3) by snapping the finished route's points back onto `route_edge`, classifies each one from the line's own bearings, and encodes a FIT course file by hand (file header, `file_id`, `course`, `lap`, `event`, `record`, `course_point`, CRC-16) -- no new dependency; `garmin-fit-sdk` is dev/test-only, for round-trip decoding in tests.
+- Two output flavors: `generic` (default, for Garmin Connect Web, which reprocesses real navigation types on import) and `garmin` (real types, for side-loading over USB -- unconfirmed).
+- UI: **Export FIT** next to Export GPX. A split-button caret for the `garmin` flavor was tried and dropped for looking goofy; a UI entry point for it is still TODO (the backend already supports it via `FitRequest.flavor`).
+- Not yet done: a real run on the Forerunner 955 confirming the watch's own turn guidance can be switched off while course point alerts still fire.
+
 ## Later
 
 Designed or discussed but not built:
 
 - **Elevation profile** under the map while planning, with gain and loss. Needs an elevation source (e.g. a USGS DEM loaded into PostGIS).
-- **FIT course export** next to GPX, with turn cues only at real junctions, so the watch stops prompting turns on winding paths. Specced in [docs/specs/fit-course-export.md](specs/fit-course-export.md); starts with a test course on the Forerunner 955.
 
 ## Tunable defaults
 

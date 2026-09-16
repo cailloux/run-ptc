@@ -1,6 +1,6 @@
 # Spec: FIT course export with junction-only turn cues
 
-Status: **built and tested on the backend** (`app/fit.py`, `POST /route/fit`); UI wiring (Export FIT next to Export GPX) is next. Written 2026-09-13, revised 2026-09-16 after Step 0 and after building past it -- see "What changed from the original design" below.
+Status: **built, tested, and merged** (`app/fit.py`, `POST /route/fit`, UI wired). The `garmin` flavor's UI entry point is still TODO (see "UI" below). Written 2026-09-13, revised 2026-09-16 after Step 0 and after building past it -- see "What changed from the original design" below.
 
 ## Problem
 
@@ -141,6 +141,7 @@ fit_bearing_window_m: 15
 fit_straight_cues: ambiguous      # ambiguous | all | none
 fit_cluster_m: 20
 fit_course_pace_min_per_mi: 9.0
+fit_snap_m: 5   # how far a route point may be from a route_edge and still snap onto it
 ```
 
 ## Tests (no network)
