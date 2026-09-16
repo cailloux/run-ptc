@@ -29,7 +29,7 @@ Single-user planning tool for running every cart path and road in Peachtree City
 - The city server can return UTM directly with `outSR=32616`.
 - GIST-index every geometry column.
 - Both layers contain MultiLineString features (141 counted cart paths, 23 roads), and the parts are often separated by real gaps. Store one segment per source feature as MultiLineString, but never let nodes, coverage intervals, or routing edges span parts. Work per part (`node.part_idx`).
-- Compute every length from geometry. Never read the city's length attributes (`LengthMile`, `LENGTH`, `Length`, `Shape.STLength()`).
+- Compute every length from geometry. Never read the city's length attributes (`LengthMile`, `LENGTH`, `Length`, `Shape.STLength()`). This governs the stored/counted network (segments, coverage, completion) — it doesn't require routing a client-submitted, ephemeral point array (e.g. FIT export's turn/distance math in `app/fit.py`) through PostGIS when plain Python trig is checked to be accurate enough for the job.
 - Don't measure "how much of a line is near something" with `ST_Length(ST_Intersection(line, ST_Buffer(...)))`. The pgrouting image ships GEOS 3.9.0, which returns EMPTY for that intersection when the line is exactly horizontal or vertical. Sample points and use `ST_DWithin` (the `share_within()` SQL function, or an indexed `EXISTS` per sample for large sets).
 - Import clean-up (duplicates, slivers under 1 m, roads outside the city) is described in `docs/PLAN.md` under "Clean-up on import."
 

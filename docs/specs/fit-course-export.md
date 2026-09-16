@@ -58,6 +58,19 @@ At each decision point (a graph vertex the route passes with degree ≥ 3 in `ro
 
 **Degree-2 vertices** (one path running straight into the next) get no cue, since there's no choice to make there. This is exactly the case the phantom prompts get wrong.
 
+### Why Python trig, not PostGIS geometry
+
+`_haversine_m`/`_bearing` measure the submitted route array directly in
+Python rather than round-tripping it through PostGIS, unlike the stored
+network (CLAUDE.md's "compute every length from geometry" targets segment/
+coverage measurements derived from stored geometry -- this is a client-
+submitted, ephemeral array, never stored). Checked empirically: on a
+synthetic route spanning Peachtree City, spherical vs. UTM-projected
+distance differs by ~0.2%, and bearing by a near-constant ~1.2-1.5°
+(meridian convergence at this longitude) that cancels out of `turn_angle`
+since it's a difference of two nearby bearings -- negligible against the
+20°-wide classification buckets.
+
 ### Straight cues
 
 Every side path would otherwise produce a "straight". The tunable `fit_straight_cues` takes one of three values:
