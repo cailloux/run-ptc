@@ -54,7 +54,9 @@
       <button id="route-build" class="btn btn-light" hidden
               title="Replace the route with a loop from its start that runs the picked segments">Build route</button>
       <button id="route-clear" class="btn btn-dark">Clear</button>
-      <button id="route-export" class="btn btn-light">Export GPX</button>
+      <button id="route-export-gpx" class="btn btn-light">Export GPX</button>
+      <!-- TODO: Garmin-flavor FIT export needs a UI (was a split-button caret; dropped for being goofy). Backend already supports it via FitRequest.flavor. -->
+      <button id="route-export" class="btn btn-light">Export FIT</button>
     </div>
     <div id="route-message" class="route-help"></div>
     <div class="spacer"></div>

@@ -29,6 +29,12 @@ SETTINGS = Settings(
     divided_roads=("DIVIDED RD",),
     route_parallel_road_factor=3,
     stale_after_hours=36,
+    fit_turn_thresholds_deg={"straight": 20, "slight": 45, "turn": 135, "sharp": 170},
+    fit_bearing_window_m=15,
+    fit_straight_cues="ambiguous",
+    fit_cluster_m=20,
+    fit_course_pace_min_per_mi=9.0,
+    fit_snap_m=5,
 )
 
 

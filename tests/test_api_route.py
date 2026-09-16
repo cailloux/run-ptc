@@ -62,3 +62,19 @@ def test_islands_endpoint_lists_island_edges(api, conn, network):
     client, _ = api
     features = client.get("/graph/islands").json()["features"]
     assert [f["properties"]["source_oid"] for f in features] == [3]
+
+
+def test_fit_export_defaults_to_generic_course_points(api, conn, network):
+    client, _ = api
+    latlngs = [list(latlon(conn, x, 0)) for x in range(0, 51, 5)]
+    resp = client.post("/route/fit", json={"name": "Test course", "latlngs": latlngs})
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "application/vnd.ant.fit"
+
+
+def test_fit_export_accepts_a_garmin_flavor(api, conn, network):
+    client, _ = api
+    latlngs = [list(latlon(conn, x, 0)) for x in range(0, 51, 5)]
+    resp = client.post("/route/fit",
+                       json={"name": "Test course", "latlngs": latlngs, "flavor": "garmin"})
+    assert resp.status_code == 200
