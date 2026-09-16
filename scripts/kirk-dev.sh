@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build the working tree on kirk and (re)start the dev pair:
 #   run-ptc-dev-db  PostGIS + pgRouting, data in /mnt/user/appdata/run-ptc/dev/pgdata
-#   run-ptc-dev     the app, at http://kirk:8011
+#   run-ptc-dev     the app, at http://kirk:8011, config from /mnt/user/appdata/run-ptc/dev/config
 # The dev database password is generated on kirk and never leaves it.
 set -euo pipefail
 
@@ -17,7 +17,7 @@ ssh "$HOST" bash -s -- "$BASE" "$PG_IMAGE" <<'REMOTE'
 set -euo pipefail
 BASE=$1 PG_IMAGE=$2
 DEV=$BASE/dev
-mkdir -p "$DEV/pgdata"
+mkdir -p "$DEV/pgdata" "$DEV/config"
 
 if [ ! -f "$DEV/db.env" ]; then
     (
@@ -38,6 +38,6 @@ fi
 
 docker rm -f run-ptc-dev >/dev/null 2>&1 || true
 docker run -d --name run-ptc-dev --network services -p 8011:8000 --env-file "$DEV/app.env" \
-    run-ptc:dev >/dev/null
+    -v "$DEV/config:/app/config:ro" run-ptc:dev >/dev/null
 echo "run-ptc-dev started on http://kirk:8011"
 REMOTE
