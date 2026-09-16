@@ -15,9 +15,8 @@
   const buttons = {
     undo: $('route-undo'), redo: $('route-redo'), retrace: $('route-retrace'),
     finish: $('route-finish'), build: $('route-build'), clear: $('route-clear'),
-    exportGpx: $('route-export-gpx'), exportFit: $('route-export'), exportGarmin: $('route-export-garmin'),
+    exportGpx: $('route-export-gpx'), exportFit: $('route-export'),
   };
-  const exportMenu = $('route-export-menu');
   const newChip = $('route-new');
 
   // The route is a list of stops. The first is the start; each later stop
@@ -138,7 +137,6 @@
     buttons.retrace.disabled = busy || pts.length < 2;
     buttons.exportGpx.disabled = busy || pts.length < 2;
     buttons.exportFit.disabled = busy || pts.length < 2;
-    buttons.exportGarmin.disabled = busy || pts.length < 2;
     buttons.clear.disabled = busy || !state.stops.length;
     buttons.finish.disabled = busy;
     buttons.finish.setAttribute('aria-pressed', String(picking));
@@ -574,10 +572,6 @@
   buttons.build.addEventListener('click', () => { if (picks.size && !busy) build(); });
   buttons.exportGpx.addEventListener('click', exportGpx);
   buttons.exportFit.addEventListener('click', () => exportFit('generic'));
-  buttons.exportGarmin.addEventListener('click', () => {
-    exportMenu.open = false;
-    exportFit('garmin');
-  });
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && routeMode && !e.target.closest('input, textarea')) {

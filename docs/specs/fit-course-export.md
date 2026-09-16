@@ -114,7 +114,9 @@ Take every field number, type, scale, and enum value from the FIT SDK's profile 
 
 ### UI
 
-Built: the route bar gains **Export FIT** (generic, default) next to Export GPX, with a caret opening **Export Garmin** (the `garmin` flavor). Both FIT buttons are enabled when the route has two or more points, same as Export GPX. Downloads: `run-ptc-YYYY-MM-DD-X.XXmi.fit` (generic), `run-ptc-YYYY-MM-DD-X.XXmi-garmin.fit`.
+Built: the route bar gains **Export FIT** (generic flavor) next to Export GPX, enabled when the route has two or more points, same as Export GPX. Download: `run-ptc-YYYY-MM-DD-X.XXmi.fit`.
+
+**TODO:** a UI entry point for the `garmin` flavor. A split-button caret was tried and dropped for being visually goofy; the backend (`FitRequest.flavor`) already supports it, so this is UI-only work.
 
 **Not built:** map preview of cues (small arrows at the cue points while planning). Worth adding if cue placement is hard to judge from the watch alone.
 
@@ -141,6 +143,6 @@ fit_course_pace_min_per_mi: 9.0
 ## Done when
 
 1. Backend and API built and tested (`app/fit.py`, `POST /route/fit`) -- done.
-2. UI wired (Export FIT / Export Garmin next to Export GPX) -- done.
+2. UI wired (Export FIT next to Export GPX) -- done. Export Garmin entry point -- TODO, see above.
 3. Tests pass on kirk and in CI -- done (`scripts/kirk-test.sh`, 2026-09-16).
 4. A real run on the 955 confirms: map-based turn guidance off, course point alerts fire, and the alert text is legible -- not yet done. Do this before relying on the generic flavor for a real run; if Connect Web still shows phantom turns even with only generic points, rethink (e.g. try the `garmin` flavor over USB, or a TCX course).
