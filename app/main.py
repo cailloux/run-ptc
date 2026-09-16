@@ -13,15 +13,18 @@ from app.jobs import mark_interrupted
 
 log = logging.getLogger(__name__)
 
-# The Authelia session cookie's name, as set on ptc.grommet.co. Its mere
-# presence is enough here -- it's not treated as proof of a valid session
-# (Authelia/Traefik already enforce that on every route they gate), only as
-# "this browser has logged in," which is what should defeat public caching.
-SESSION_COOKIE = "authelia_session"
 PUBLIC_CACHE_SECONDS = 24 * 60 * 60   # coverage changes at most once a day
-# Only these get cached for an anonymous visitor. Deliberately an allowlist,
-# not "everything but the cookie": if the external Cloudflare/Traefik rule
-# is ever widened by mistake, that's a routing bug, not also a caching one.
+# The vanity hostnames the share pages are reachable on. admin.runptc.com
+# (behind Cloudflare Access) is deliberately not one of these, even though
+# its own map view fetches the same paths below -- an admin session should
+# never see a day-old cached response to its own live data.
+PUBLIC_HOSTS = frozenset({
+    "progress.runptc.com", "left.runptc.com", "runptc.com", "www.runptc.com",
+})
+# Only these paths, and only on the hosts above, get cached for a visitor.
+# Deliberately two allowlists, not "everything except admin's hostname": if
+# a routing rule outside this app is ever widened by mistake, that's a
+# routing bug, not also a caching one.
 PUBLIC_CACHE_PATHS = frozenset({
     "/left", "/left.html", "/progress", "/progress.html", "/stats", "/network",
     "/share.js", "/common.js", "/tokens.css", "/style.css",
@@ -31,13 +34,14 @@ PUBLIC_CACHE_PATHS = frozenset({
 
 class CacheControlMiddleware(BaseHTTPMiddleware):
     """Cache-Control tuned in code, not in Cloudflare: a long public TTL for
-    the allowlisted public paths when the visitor hasn't logged in, never
-    cached at all otherwise, so a logged-in session always sees live data."""
+    the allowlisted public paths on the public hostnames, never cached at
+    all otherwise -- so admin.runptc.com, even hitting the same paths,
+    always sees live data."""
 
     async def dispatch(self, request, call_next):
         response = await call_next(request)
         if (request.method in ("GET", "HEAD") and request.url.path in PUBLIC_CACHE_PATHS
-                and SESSION_COOKIE not in request.cookies):
+                and request.url.hostname in PUBLIC_HOSTS):
             response.headers["Cache-Control"] = f"public, max-age={PUBLIC_CACHE_SECONDS}"
         else:
             response.headers["Cache-Control"] = "private, no-store"
