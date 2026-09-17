@@ -193,7 +193,8 @@ def test_failed_jobs_end_with_one_clean_line(conn, db_url, monkeypatch, capsys):
 
 def test_import_is_a_forced_refresh_logged_as_import(conn, db_url, monkeypatch, city):
     monkeypatch.setenv("DATABASE_URL", db_url)
-    monkeypatch.setattr(cli, "refresh", lambda conn, client, settings, excl, force: city.run(conn, force=force))
+    monkeypatch.setattr(cli, "refresh",
+                        lambda conn, client, settings, excl, force, network: city.run(conn, force=force))
     assert cli.main(["import"]) == 0
     assert cli.main(["import"]) == 0   # unchanged city: still imports every layer
     assert sorted(city.fetched) == ["cartpath", "cartpath", "road", "road"]

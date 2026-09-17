@@ -2,7 +2,7 @@ import pytest
 
 from app import exclusions as excl
 from app.config import CONFIG_DIR
-from tests.helpers import cartpath, global_id, line, road, run_import, segment
+from tests.helpers import add_network, cartpath, global_id, line, road, run_import, segment
 
 # ---- loading (no database) -------------------------------------------------
 
@@ -91,6 +91,26 @@ def test_object_id_with_matching_name_is_quiet(conn):
     roads_fixture(conn)
     assert excl.apply(conn, excl.parse(
         {"roads": [{"object_id": 1, "name": "twiggs cor", "reason": "Gated"}]})) == []
+
+
+def test_exclusions_apply_only_to_one_network(conn):
+    """A real bug caught while wiring --network through: apply()'s reset step
+    and _exclude()'s WHERE both had no network filter -- reapplying ptc's
+    exclusions would reset or exclude another network's segments."""
+    roads_fixture(conn)
+    add_network(conn, "testworld")
+    run_import(conn, "road", [road(101, line((0, 40), (30, 40)), name="MEADE FIELD COMPLEX")],
+              network="testworld")
+    excl.apply(conn, excl.parse({"roads": [{"name": "meade field complex", "reason": "Parking loop"}]}),
+              network="ptc")
+    assert [segment(conn, i, "road")["excluded"] for i in (1, 2, 3, 4)] == [False, True, True, False]
+    assert segment(conn, 101, "road")["excluded"] is False
+
+    # testworld's own exclusion must also survive a later reapply for ptc.
+    excl.apply(conn, excl.parse({"roads": [{"object_id": 101, "reason": "closed"}]}), network="testworld")
+    assert segment(conn, 101, "road")["excluded"] is True
+    excl.apply(conn, excl.parse({}), network="ptc")
+    assert segment(conn, 101, "road")["excluded"] is True
 
 
 def test_orphans_warn(conn):

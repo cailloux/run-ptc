@@ -118,33 +118,39 @@ def _canonical_key(conn: psycopg.Connection, layer: str, key: str, label: str,
     return row[0]
 
 
-def _exclude(conn: psycopg.Connection, where: str, params: tuple, reason: str) -> list[tuple]:
+def _exclude(conn: psycopg.Connection, where: str, params: tuple, reason: str, network_id: int) -> list[tuple]:
     return conn.execute(
-        f"UPDATE segment SET excluded = true, exclusion_reason = %s WHERE {where}"
+        f"UPDATE segment SET excluded = true, exclusion_reason = %s WHERE network_id = %s AND {where}"
         " RETURNING source_key, name",
-        (reason, *params),
+        (reason, network_id, *params),
     ).fetchall()
 
 
-def apply(conn: psycopg.Connection, exclusions: Exclusions) -> list[str]:
-    """Reset and reapply all exclusions in one transaction. Returns warnings."""
+def apply(conn: psycopg.Connection, exclusions: Exclusions, network: str = "ptc") -> list[str]:
+    """Reset and reapply all exclusions in one transaction, for one network. Returns warnings."""
+    network_id = conn.execute("SELECT id FROM network WHERE slug = %s", (network,)).fetchone()
+    if network_id is None:
+        raise RuntimeError(f"no network with slug {network!r}")
+    network_id = network_id[0]
     warnings: list[str] = []
     with conn.transaction():
         conn.execute(
-            "UPDATE segment SET excluded = false, exclusion_reason = NULL WHERE excluded"
+            "UPDATE segment SET excluded = false, exclusion_reason = NULL"
+            " WHERE excluded AND network_id = %s",
+            (network_id,),
         )
 
         for e in exclusions.cartpaths:
             label = f"cartpath {e.global_id}"
             key = _canonical_key(conn, "cartpath", e.global_id, label, warnings)
-            if not _exclude(conn, "layer = 'cartpath' AND source_key = %s", (key,), e.reason):
+            if not _exclude(conn, "layer = 'cartpath' AND source_key = %s", (key,), e.reason, network_id):
                 warnings.append(f"{label} matches no segment (deleted by the city?)")
 
         for e in exclusions.roads:
             if e.object_id is not None:
                 label = f"road object_id {e.object_id}"
                 key = _canonical_key(conn, "road", str(e.object_id), label, warnings)
-                rows = _exclude(conn, "layer = 'road' AND source_key = %s", (key,), e.reason)
+                rows = _exclude(conn, "layer = 'road' AND source_key = %s", (key,), e.reason, network_id)
                 if not rows:
                     warnings.append(f"{label} matches no segment (deleted by the city?)")
                 elif e.name and not _same_name(rows[0][1], e.name):
@@ -157,6 +163,7 @@ def apply(conn: psycopg.Connection, exclusions: Exclusions) -> list[str]:
                     "layer = 'road' AND upper(trim(name)) = upper(trim(%s))",
                     (e.name,),
                     e.reason,
+                    network_id,
                 )
                 if not rows:
                     warnings.append(f"road name {e.name!r} matches no segment")

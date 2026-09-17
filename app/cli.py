@@ -54,32 +54,34 @@ def cmd_migrate(args) -> int:
 
 def cmd_refresh(args) -> int:
     """refresh imports the layers the city changed; import is a refresh that imports every layer."""
-    settings = load_settings()
+    settings = load_settings(network=args.network)
     excl = exclusions.load()   # checked before any download
 
     def job(conn) -> list[str]:
         with httpx2.Client(timeout=120) as client:
-            return refresh(conn, client, settings, excl, force=args.force).lines()
+            return refresh(conn, client, settings, excl, force=args.force, network=args.network).lines()
 
     return _run_job(args, args.command, job)
 
 
 def cmd_graph(args) -> int:
-    settings = load_settings()
-    return _run_job(args, "graph", lambda conn: build_graph(conn, settings).lines())
+    settings = load_settings(network=args.network)
+    return _run_job(args, "graph", lambda conn: build_graph(conn, settings, args.network).lines())
 
 
 def cmd_exclusions(args) -> int:
     excl = exclusions.load()
     with db.connect() as conn:
-        warnings = exclusions.apply(conn, excl)
-        excluded = conn.execute("SELECT count(*) FROM segment WHERE excluded").fetchone()[0]
+        warnings = exclusions.apply(conn, excl, network=args.network)
+        excluded = conn.execute(
+            "SELECT count(*) FROM segment WHERE excluded AND network_id ="
+            " (SELECT id FROM network WHERE slug = %s)", (args.network,)).fetchone()[0]
     print(f"{excluded} segments excluded, {len(warnings)} warnings")
     return 0
 
 
 def cmd_sync(args) -> int:
-    settings = load_settings()
+    settings = load_settings(network=args.network)
     athlete_id, api_key = intervals_credentials()
 
     def job(conn) -> list[str]:
@@ -109,23 +111,23 @@ def cmd_activities(args) -> int:
     return 0
 
 
-def _stats_lines(conn) -> list[str]:
-    return metrics(conn).lines() + near_miss_lines(near_misses(conn))
+def _stats_lines(conn, network: str = "ptc") -> list[str]:
+    return metrics(conn, network).lines() + near_miss_lines(near_misses(conn, network))
 
 
 def cmd_recompute(args) -> int:
-    settings = load_settings()
+    settings = load_settings(network=args.network)
 
     def job(conn) -> list[str]:
         started = time.monotonic()
-        hit = recompute(conn, settings)
+        hit = recompute(conn, settings, args.network)
         return [
             f"recompute: {hit} nodes hit in {time.monotonic() - started:.1f} s "
             f"(radius: cart paths {settings.match_radius_cartpath_m} m, cart path ends "
             f"{settings.match_radius_cartpath_end_m} m, roads {settings.match_radius_road_m} m, "
             f"{', '.join(settings.match_radius_wide_road_classes)} {settings.match_radius_wide_m} m; "
             f"gap split {settings.track_gap_split_m} m)",
-            *_stats_lines(conn),
+            *_stats_lines(conn, args.network),
         ]
 
     return _run_job(args, "recompute", job)
@@ -139,7 +141,7 @@ def cmd_alerts(args) -> int:
             health.mark_sent(conn, args.sent)
             return 0
         with conn.transaction():
-            notices = health.alerts(conn, load_settings(), datetime.now(UTC))
+            notices = health.alerts(conn, load_settings(network=args.network), datetime.now(UTC))
     # Records end with RECORD_SEP so bodies can span lines.
     sys.stdout.write("".join(n.record() + health.RECORD_SEP for n in notices))
     return 0
@@ -147,7 +149,7 @@ def cmd_alerts(args) -> int:
 
 def cmd_stats(args) -> int:
     with db.connect() as conn:
-        print("\n".join(_stats_lines(conn)))
+        print("\n".join(_stats_lines(conn, args.network)))
     return 0
 
 
@@ -158,6 +160,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m app.cli")
     parser.add_argument("--trigger", choices=["cli", "schedule"], default="cli",
                         help="recorded in job_run; the nightly script passes schedule")
+    parser.add_argument("--network", default="ptc", help="network slug (default: ptc)")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("migrate", help="apply pending migrations").set_defaults(func=cmd_migrate)
     sub.add_parser("import", help="import every city layer, with a change report").set_defaults(
