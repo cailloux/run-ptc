@@ -1,7 +1,7 @@
 import pytest
 
-from app.graph import build_graph
-from tests.helpers import SETTINGS, cartpath, line, road, run_import
+from app.graph import build_graph, graph_report, main_component
+from tests.helpers import SETTINGS, add_network, cartpath, line, network_id, road, run_import
 
 
 def graph(conn, cartpaths=(), roads=()):
@@ -139,3 +139,63 @@ def test_edge_fractions_map_nodes_onto_edges(conn):
         ORDER BY n.seq
     """).fetchall()
     assert rows == [(0, 0.0), (1, 0.0), (2, 0.0), (3, 0.5), (4, 0.5)]
+
+
+def test_two_networks_graphs_coexist_without_id_collisions(conn):
+    """route_edge/route_vertex ids restart at 1 for every build_graph() call,
+    so a second network's graph must not collide with (or wipe) the first's."""
+    ptc_report = graph(conn, [cartpath(1, line((0, 0), (100, 0)))])
+
+    add_network(conn, "testworld")
+    run_import(conn, "cartpath", [cartpath(101, line((0, 0), (200, 0)))], network="testworld")
+    testworld_report = build_graph(conn, SETTINGS, network="testworld")
+
+    assert (ptc_report.edges, ptc_report.vertices) == (1, 2)
+    assert (testworld_report.edges, testworld_report.vertices) == (1, 2)
+
+    # Rebuilding testworld's graph must not have deleted or altered ptc's.
+    assert graph_report(conn, "ptc").edges == 1
+    assert edges(conn) == [
+        ("cartpath:1", 0, 0.0, 1.0, 100.0),
+        ("cartpath:101", 0, 0.0, 1.0, 200.0),
+    ]
+
+
+def test_two_networks_components_and_islands_stay_isolated(conn):
+    """Each network gets its own T-junction (one component) plus its own
+    disconnected island, built independently -- pgr_connectedComponents and
+    main_component() must not mix the two networks' numbering or edges."""
+    run_import(conn, "cartpath", [
+        cartpath(1, line((0, 0), (100, 0))), cartpath(2, line((50, 0), (50, 60))),
+        cartpath(3, line((5000, 5000), (5040, 5000))),   # ptc's island
+    ])
+    ptc_report = build_graph(conn, SETTINGS)
+
+    add_network(conn, "testworld")
+    run_import(conn, "cartpath", [
+        cartpath(101, line((0, 0), (100, 0))), cartpath(102, line((50, 0), (50, 60))),
+        cartpath(103, line((5000, 5000), (5040, 5000))),   # testworld's own island
+    ], network="testworld")
+    testworld_report = build_graph(conn, SETTINGS, network="testworld")
+
+    for report in (ptc_report, testworld_report):
+        assert report.components == 2
+        assert len(report.islands) == 1
+
+    assert ptc_report.islands[0].segments == ["cartpath:3"]
+    assert testworld_report.islands[0].segments == ["cartpath:103"]
+
+    assert main_component(conn, "ptc") is not None
+    assert main_component(conn, "testworld") is not None
+
+    # The real isolation property: each network's route_edge rows reference
+    # only its own segments, never the other network's -- component *values*
+    # legitimately coincide between two structurally identical networks,
+    # since they're just small per-network integers, not global ids.
+    def own_oids(network):
+        return {oid for oid, in conn.execute(
+            "SELECT s.source_oid FROM route_edge e JOIN segment s ON s.id = e.segment_id"
+            " WHERE e.network_id = %s", (network_id(conn, network),))}
+
+    assert own_oids("ptc") == {1, 2, 3}
+    assert own_oids("testworld") == {101, 102, 103}

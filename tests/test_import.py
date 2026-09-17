@@ -4,7 +4,8 @@ import pytest
 
 from app.exclusions import Exclusions
 from app.importer import LAYERS, import_layer
-from tests.helpers import SETTINGS, cartpath, global_id, line, network_id, nodes_of, road, run_import, segment
+from tests.helpers import (SETTINGS, add_network, cartpath, global_id, line, network_id, nodes_of, road,
+                           run_import, segment)
 
 
 def reversed_line(coords):
@@ -140,6 +141,21 @@ def test_layers_are_imported_independently(conn):
     run_import(conn, "road", [road(1, line((0, 0), (40, 0)))])
     assert segment(conn, 1) is not None
     assert segment(conn, 1, "road") is not None
+
+
+def test_networks_are_imported_independently(conn):
+    """A second network's import of the same layer name must not treat the
+    first network's segments as removed, changed, or absent."""
+    run_import(conn, "cartpath", [cartpath(1, line((0, 0), (40, 0)))])
+
+    add_network(conn, "testworld")
+    report = run_import(conn, "cartpath", [cartpath(101, line((0, 0), (40, 0)))], network="testworld")
+
+    assert (report.removed, report.changed, report.added) == (0, 0, 1)
+    assert segment(conn, 1) is not None
+    assert segment(conn, 101) is not None
+    assert conn.execute("SELECT network_id FROM segment WHERE source_oid = 101").fetchone()[0] \
+        == network_id(conn, "testworld")
 
 
 def test_empty_response_refuses_to_import(conn):
