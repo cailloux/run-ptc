@@ -1,7 +1,7 @@
 import pytest
 
 from app.graph import build_graph
-from tests.helpers import SETTINGS, cartpath, line, run_import
+from tests.helpers import SETTINGS, add_network, cartpath, line, run_import
 from tests.test_api_sync import api  # noqa: F401  (fixture)
 from tests.test_routing import latlon
 
@@ -78,3 +78,42 @@ def test_fit_export_accepts_a_garmin_flavor(api, conn, network):
     resp = client.post("/route/fit",
                        json={"name": "Test course", "latlngs": latlngs, "flavor": "garmin"})
     assert resp.status_code == 200
+
+
+def test_networks_endpoint_lists_every_network(api, conn):
+    client, _ = api
+    add_network(conn, "testworld")
+    slugs = {n["slug"] for n in client.get("/networks").json()}
+    assert slugs == {"ptc", "testworld"}
+
+
+def test_read_endpoints_stay_isolated_per_network(api, conn, network, monkeypatch):
+    """/nodes, /activities, /changes, /stats all gained real WHERE-clause
+    scoping in this step -- no test exercised any of them with a second
+    network present."""
+    client, _ = api
+    # config/settings.yaml only has a real "ptc" block; /status's own
+    # load_settings() call needs a stand-in so this test can use a
+    # network slug that only exists as a DB row, not a settings block.
+    monkeypatch.setattr("app.api.load_settings", lambda network="ptc": SETTINGS)
+    add_network(conn, "testworld")
+    run_import(conn, "cartpath", [cartpath(101, line((0, 0), (100, 0)))], network="testworld")
+    run_import(conn, "cartpath", [cartpath(101, line((0, 0), (100, 0))),
+                                  cartpath(102, line((0, 50), (100, 50)))], network="testworld")
+    build_graph(conn, SETTINGS, network="testworld")
+
+    ptc_nodes = client.get("/nodes", params={"layer": "cartpath"}).json()["features"]
+    tw_nodes = client.get("/nodes", params={"layer": "cartpath", "network": "testworld"}).json()["features"]
+    assert {n["properties"]["id"] for n in ptc_nodes}.isdisjoint({n["properties"]["id"] for n in tw_nodes})
+
+    ptc_stats = client.get("/stats").json()
+    tw_stats = client.get("/stats", params={"network": "testworld"}).json()
+    assert (ptc_stats["cartpath"]["counted"], tw_stats["cartpath"]["counted"]) == (3, 2)
+
+    tw_changes = client.get("/changes", params={"network": "testworld"}).json()["features"]
+    assert [f["properties"]["source_oid"] for f in tw_changes] == [102]
+
+    ptc_status = client.get("/status").json()
+    tw_status = client.get("/status", params={"network": "testworld"}).json()
+    assert (ptc_status["sources"]["city"]["layers"]["cartpath"]["stored"],
+            tw_status["sources"]["city"]["layers"]["cartpath"]["stored"]) == (3, 2)

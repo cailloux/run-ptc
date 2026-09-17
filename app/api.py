@@ -2,6 +2,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 import httpx2
+import psycopg
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response
 from fastapi.responses import FileResponse
 from psycopg.rows import dict_row
@@ -67,6 +68,13 @@ def _geojson(sql: str, params: tuple | dict) -> Response:
     return Response(body, media_type="application/geo+json")
 
 
+def _network_id(conn: psycopg.Connection, network: str) -> int:
+    row = conn.execute("SELECT id FROM network WHERE slug = %s", (network,)).fetchone()
+    if row is None:
+        raise RuntimeError(f"no network with slug {network!r}")
+    return row[0]
+
+
 def default_intervals_client() -> IntervalsClient:
     athlete_id, api_key = intervals_credentials()
     return IntervalsClient(athlete_id, api_key)
@@ -111,17 +119,30 @@ def progress_page() -> FileResponse:
     return FileResponse(ROOT / "app" / "static" / "progress.html")
 
 
+@router.get("/networks")
+def networks() -> list[dict]:
+    """Every known network, for a future picker."""
+    with db.connect() as conn:
+        rows = conn.execute(
+            "SELECT slug, name, kind, srid, sports FROM network ORDER BY id").fetchall()
+    return [{"slug": slug, "name": name, "kind": kind, "srid": srid, "sports": sports}
+            for slug, name, kind, srid, sports in rows]
+
+
 @router.get("/network")
-def network(layer: LayerName) -> Response:
+def network(layer: LayerName, network: str = "ptc") -> Response:
     """Segments with coverage state per run of node intervals (see app/coverage.py)."""
     with db.connect() as conn:
-        body = coverage_geojson(conn, layer)
+        body = coverage_geojson(conn, layer, network)
     return Response(body, media_type="application/geo+json")
 
 
 @router.get("/nodes")
-def nodes(layer: LayerName, status: Literal["hit", "missed"] | None = None) -> Response:
+def nodes(layer: LayerName, status: Literal["hit", "missed"] | None = None,
+         network: str = "ptc") -> Response:
     """Node points with a hit flag. Details load per node from /nodes/{id}."""
+    with db.connect() as conn:
+        network_id = _network_id(conn, network)
     return _geojson("""
         SELECT json_build_object('type', 'FeatureCollection', 'features',
             coalesce(json_agg(json_build_object(
@@ -130,9 +151,9 @@ def nodes(layer: LayerName, status: Literal["hit", "missed"] | None = None) -> R
                 'properties', json_build_object('id', n.id, 'hit', n.hit_at IS NOT NULL)
             ) ORDER BY n.id), '[]'::json))::text
         FROM node n JOIN segment s ON s.id = n.segment_id
-        WHERE s.layer = %(layer)s AND NOT s.excluded
+        WHERE s.layer = %(layer)s AND NOT s.excluded AND s.network_id = %(network_id)s
           AND (%(status)s::text IS NULL OR (n.hit_at IS NOT NULL) = (%(status)s = 'hit'))
-    """, {"layer": layer, "status": status})
+    """, {"layer": layer, "status": status, "network_id": network_id})
 
 
 @router.get("/nodes/{node_id}")
@@ -160,8 +181,10 @@ def node_detail(node_id: int) -> dict:
 
 
 @router.get("/activities")
-def activities() -> Response:
+def activities(network: str = "ptc") -> Response:
     """City runs. Tracks are simplified to 3 m for display only; matching uses full geometry."""
+    with db.connect() as conn:
+        network_id = _network_id(conn, network)
     return _geojson("""
         SELECT json_build_object('type', 'FeatureCollection', 'features',
             coalesce(json_agg(json_build_object(
@@ -176,26 +199,26 @@ def activities() -> Response:
                     'distance_m', round(distance_m::numeric),
                     'parts', ST_NumGeometries(geom))
             ) ORDER BY start_at), '[]'::json))::text
-        FROM activity WHERE status = 'city'
-    """, ())
+        FROM activity WHERE status = 'city' AND network_id = %(network_id)s
+    """, {"network_id": network_id})
 
 
 @router.post("/route/snap")
-def route_snap(point: LatLon) -> dict:
+def route_snap(point: LatLon, network: str = "ptc") -> dict:
     """Where a click lands on the network: the start of a route."""
-    max_m = load_settings().route_snap_max_m
+    max_m = load_settings(network=network).route_snap_max_m
     with db.connect() as conn:
-        s = _route_errors(lambda: snap(conn, point.lat, point.lon, max_m))
+        s = _route_errors(lambda: snap(conn, point.lat, point.lon, max_m, network))
     return {"lat": s.lat, "lon": s.lon}
 
 
 @router.post("/route/leg")
-def route_leg(body: LegRequest) -> dict:
+def route_leg(body: LegRequest, network: str = "ptc") -> dict:
     """Shortest path along paths and roads from one clicked point to another."""
-    max_m = load_settings().route_snap_max_m
+    max_m = load_settings(network=network).route_snap_max_m
     with db.connect() as conn:
         r = _route_errors(lambda: leg(conn, (body.start.lat, body.start.lon),
-                                      (body.end.lat, body.end.lon), max_m))
+                                      (body.end.lat, body.end.lon), max_m, network))
     return {
         "latlngs": r.latlngs,
         "length_m": round(r.length_m, 1),
@@ -205,20 +228,20 @@ def route_leg(body: LegRequest) -> dict:
 
 
 @router.post("/route/coverage")
-def route_coverage(body: CoverageRequest) -> dict:
+def route_coverage(body: CoverageRequest, network: str = "ptc") -> dict:
     """How much of a route is new ground (not-run intervals), and where."""
     with db.connect() as conn:
-        r = new_miles(conn, body.latlngs)
+        r = new_miles(conn, body.latlngs, network)
     return {"new_m": round(r.new_m, 1), "new": r.lines}
 
 
 @router.post("/route/finish")
-def route_finish(body: FinishRequest) -> dict:
+def route_finish(body: FinishRequest, network: str = "ptc") -> dict:
     """A loop from the start that runs every not-run stretch of these segments."""
-    max_m = load_settings().route_snap_max_m
+    max_m = load_settings(network=network).route_snap_max_m
     with db.connect() as conn:
         f = _route_errors(lambda: finish_route(conn, (body.start.lat, body.start.lon),
-                                               body.segment_ids, max_m))
+                                               body.segment_ids, max_m, network))
     return {
         "from": {"lat": f.start[0], "lon": f.start[1]},
         "legs": [{"latlngs": lg["latlngs"], "length_m": round(lg["length_m"], 1),
@@ -229,14 +252,14 @@ def route_finish(body: FinishRequest) -> dict:
 
 
 @router.post("/route/fit")
-def route_fit(body: FitRequest) -> Response:
+def route_fit(body: FitRequest, network: str = "ptc") -> Response:
     """The route as a FIT course, with turn cues at real decision points
     only. flavor "generic" (default) is what Garmin Connect Web keeps on
     import; "garmin" carries the real turn types, for side-loading."""
-    settings = load_settings()
+    settings = load_settings(network=network)
     cum_m = cumulative_m(body.latlngs)
     with db.connect() as conn:
-        course_points = find_course_points(conn, body.latlngs, settings, cum_m)
+        course_points = find_course_points(conn, body.latlngs, settings, cum_m, network)
     data = encode_course(body.name, body.latlngs, course_points, cum_m=cum_m,
                          pace_min_per_mi=settings.fit_course_pace_min_per_mi,
                          created_at=int(datetime.now(UTC).timestamp()), flavor=body.flavor)
@@ -245,12 +268,11 @@ def route_fit(body: FitRequest) -> Response:
 
 
 @router.get("/graph/islands")
-def graph_islands() -> Response:
+def graph_islands(network: str = "ptc") -> Response:
     """Edges not connected to the main network, for review."""
-    network = "ptc"
     with db.connect() as conn:
         main = main_component(conn, network)
-        network_id = conn.execute("SELECT id FROM network WHERE slug = %s", (network,)).fetchone()[0]
+        network_id = _network_id(conn, network)
         body = conn.execute("""
             WITH island AS (
                 SELECT v.component, sum(e.length_m) AS length_m
@@ -280,13 +302,13 @@ def graph_islands() -> Response:
 
 
 @router.post("/sync", status_code=202)
-def start_sync(request: Request, background: BackgroundTasks) -> dict:
+def start_sync(request: Request, background: BackgroundTasks, network: str = "ptc") -> dict:
     """Run the default incremental sync in the background."""
     try:
         client = request.app.state.intervals_client_factory()
     except RuntimeError as e:   # credentials not set
         raise HTTPException(status_code=503, detail=str(e))
-    settings = load_settings()
+    settings = load_settings(network=network)
 
     def run_sync(conn) -> list[str]:
         try:
@@ -300,18 +322,18 @@ def start_sync(request: Request, background: BackgroundTasks) -> dict:
 
 
 @router.post("/refresh", status_code=202)
-def start_refresh(request: Request, background: BackgroundTasks) -> dict:
+def start_refresh(request: Request, background: BackgroundTasks, network: str = "ptc") -> dict:
     """Check the city's layers and import any that changed, in the background."""
     try:
         excl = exclusions.load()
     except exclusions.ExclusionError as e:
         raise HTTPException(status_code=503, detail=f"exclusions.yaml: {e}")
-    settings = load_settings()
+    settings = load_settings(network=network)
     client = request.app.state.city_client_factory()
 
     def run_refresh(conn) -> list[str]:
         try:
-            return refresh(conn, client, settings, excl).lines()
+            return refresh(conn, client, settings, excl, network=network).lines()
         finally:
             client.close()
 
@@ -319,8 +341,10 @@ def start_refresh(request: Request, background: BackgroundTasks) -> dict:
 
 
 @router.get("/changes")
-def changes() -> Response:
+def changes(network: str = "ptc") -> Response:
     """Segments from each layer's latest city change (added or changed)."""
+    with db.connect() as conn:
+        network_id = _network_id(conn, network)
     return _geojson("""
         SELECT json_build_object('type', 'FeatureCollection', 'features',
             coalesce(json_agg(json_build_object(
@@ -331,25 +355,35 @@ def changes() -> Response:
                     'seg_type', s.seg_type, 'change', s.city_change, 'changed_at', s.changed_at)
             ) ORDER BY s.layer, s.source_oid), '[]'::json))::text
         FROM segment s
-        JOIN (SELECT layer, max(changed_at) AS at FROM segment GROUP BY layer) latest
+        JOIN (SELECT layer, max(changed_at) AS at FROM segment WHERE network_id = %(network_id)s
+              GROUP BY layer) latest
           ON latest.layer = s.layer AND s.changed_at = latest.at
-    """, ())
+        WHERE s.network_id = %(network_id)s
+    """, {"network_id": network_id})
 
 
 @router.get("/status")
-def status() -> dict:
+def status(network: str = "ptc") -> dict:
     """Everything the status page and the map's banner show."""
-    settings = load_settings()
+    settings = load_settings(network=network)
     now = datetime.now(UTC)
     with db.connect() as conn:
+        network_id = _network_id(conn, network)
         sources = {k: h.as_dict() for k, h in health.all_health(conn, settings, now).items()}
 
-        by_status = dict(conn.execute("SELECT status, count(*) FROM activity GROUP BY status").fetchall())
+        # 'outside'/'no_gps' mean "matches no known network" (network_id IS
+        # NULL) -- a global count, the same on every network's status page.
+        # Only 'city' (always network_id NOT NULL) is scoped to this one.
+        by_status = dict(conn.execute(
+            "SELECT status, count(*) FROM activity WHERE network_id = %s OR network_id IS NULL"
+            " GROUP BY status",
+            (network_id,)).fetchall())
         sources["sync"]["counts"] = {
             "city": by_status.get("city", 0), "outside": by_status.get("outside", 0),
             "no_gps": by_status.get("no_gps", 0),
             "latest_run": conn.execute(
-                "SELECT max(start_at) FROM activity WHERE status = 'city'").fetchone()[0],
+                "SELECT max(start_at) FROM activity WHERE status = 'city' AND network_id = %s",
+                (network_id,)).fetchone()[0],
         }
 
         layers = {}
@@ -360,10 +394,10 @@ def status() -> dict:
                    coalesce(sum(s.length_m) FILTER (WHERE s.counted AND NOT s.excluded), 0),
                    count(s.id) FILTER (WHERE s.excluded)
             FROM (VALUES ('cartpath'), ('road')) l (layer)
-            LEFT JOIN source_signature g ON g.layer = l.layer
-            LEFT JOIN segment s ON s.layer = l.layer
+            LEFT JOIN source_signature g ON g.layer = l.layer AND g.network_id = %(network_id)s
+            LEFT JOIN segment s ON s.layer = l.layer AND s.network_id = %(network_id)s
             GROUP BY 1, 2, 3, 4
-        """):
+        """, {"network_id": network_id}):
             layers[layer] = {
                 "city_features": city_count, "city_last_edited": city_edited,
                 "imported_at": imported_at, "stored": stored, "counted": counted,
@@ -373,12 +407,16 @@ def status() -> dict:
 
         # The segments /changes shows, and the job that made the latest of
         # those changes: changed_at is its import's transaction start, so it
-        # falls inside that job's run.
+        # falls inside that job's run. job_run isn't network-scoped (Phase A
+        # keeps one global job lock across every network), so the job lookup
+        # itself stays global; only the segment side is scoped.
         change = conn.execute("""
             WITH latest AS (
                 SELECT s.city_change, s.changed_at FROM segment s
-                JOIN (SELECT layer, max(changed_at) AS at FROM segment GROUP BY layer) m
+                JOIN (SELECT layer, max(changed_at) AS at FROM segment
+                      WHERE network_id = %(network_id)s GROUP BY layer) m
                   ON m.layer = s.layer AND s.changed_at = m.at
+                WHERE s.network_id = %(network_id)s
             ), at AS (SELECT max(changed_at) AS at FROM latest)
             SELECT at.at,
                    (SELECT count(*) FROM latest WHERE city_change = 'added'),
@@ -392,7 +430,7 @@ def status() -> dict:
                 ORDER BY started_at DESC LIMIT 1
             ) j ON true
             WHERE at.at IS NOT NULL
-        """).fetchone()
+        """, {"network_id": network_id}).fetchone()
         sources["city"]["last_change"] = None if change is None else {
             "changed_at": change[0], "added": change[1], "changed": change[2],
             "job_id": change[3], "job": change[4], "report": change[5],
@@ -417,20 +455,21 @@ def status() -> dict:
 
 
 @router.get("/stats")
-def stats() -> dict:
+def stats(network: str = "ptc") -> dict:
     with db.connect() as conn:
+        network_id = _network_id(conn, network)
         runs, latest = conn.execute(
-            "SELECT count(*), max(start_at) FROM activity WHERE status = 'city'"
-        ).fetchone()
-        completion = metrics(conn).as_dict()
+            "SELECT count(*), max(start_at) FROM activity WHERE status = 'city' AND network_id = %s",
+            (network_id,)).fetchone()
+        completion = metrics(conn, network).as_dict()
         rows = conn.execute("""
             SELECT s.layer,
                    count(*) FILTER (WHERE counted AND NOT excluded) AS counted,
                    coalesce(sum(length_m) FILTER (WHERE counted AND NOT excluded), 0) AS counted_m,
                    (SELECT count(*) FROM node n JOIN segment s2 ON s2.id = n.segment_id
-                    WHERE s2.layer = s.layer) AS nodes
-            FROM segment s GROUP BY s.layer
-        """).fetchall()
+                    WHERE s2.layer = s.layer AND s2.network_id = %(network_id)s) AS nodes
+            FROM segment s WHERE s.network_id = %(network_id)s GROUP BY s.layer
+        """, {"network_id": network_id}).fetchall()
     result = {
         layer: {"counted": counted, "counted_mi": round(counted_m / METERS_PER_MILE, 2), "nodes": nodes}
         for layer, counted, counted_m, nodes in rows
