@@ -21,7 +21,8 @@ WITH seg AS (
            s.city_change, s.changed_at,
            count(n.id) AS nodes_total, count(n.hit_at) AS nodes_hit
     FROM segment s LEFT JOIN node n ON n.segment_id = s.id
-    WHERE s.layer = %(layer)s AND s.uncounted_reason IS DISTINCT FROM 'second carriageway'
+    WHERE s.layer = %(layer)s AND s.network_id = %(network_id)s
+      AND s.uncounted_reason IS DISTINCT FROM 'second carriageway'
     GROUP BY s.id
 ), whole AS (
     -- NULL state means "cut into interval runs".
@@ -85,5 +86,8 @@ FROM pieces p JOIN whole w ON w.id = p.segment_id
 """
 
 
-def coverage_geojson(conn: psycopg.Connection, layer: str) -> str:
-    return conn.execute(COVERAGE_SQL, {"layer": layer}).fetchone()[0]
+def coverage_geojson(conn: psycopg.Connection, layer: str, network: str = "ptc") -> str:
+    network_id = conn.execute("SELECT id FROM network WHERE slug = %s", (network,)).fetchone()
+    if network_id is None:
+        raise RuntimeError(f"no network with slug {network!r}")
+    return conn.execute(COVERAGE_SQL, {"layer": layer, "network_id": network_id[0]}).fetchone()[0]
