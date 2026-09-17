@@ -228,6 +228,28 @@ def test_sync_needs_the_city_imported_first(conn):
         do_sync(conn, FakeIntervals([], {}))
 
 
+def test_reclassify_does_not_match_a_gap_jump_line(conn):
+    """Same rule as sync's own classification (see the 'jump across' case
+    above): a network whose box only intersects the straight line connecting
+    two GPS-gap-separated fixes, not any real fix, must not be reclassified
+    as a match."""
+    city(conn)
+    tracks = {"i1": walk(conn, (-2000, 500), (-1900, 500)) + walk(conn, (2000, 500), (2100, 500))}
+    do_sync(conn, FakeIntervals([run("i1")], tracks))
+    assert activity(conn, "i1")[0] == "outside"
+
+    add_network(conn, "midtown")
+    # This box sits squarely on the straight line connecting i1's two real
+    # fix clusters, but contains none of the actual fixes.
+    run_import(conn, "cartpath", [
+        cartpath(201, line((400, 490), (600, 490))),
+        cartpath(202, line((400, 510), (600, 510))),
+    ], network="midtown")
+
+    assert reclassify_unmatched(conn) == 0
+    assert activity(conn, "i1")[0] == "outside"
+
+
 def test_reclassify_unmatched_picks_up_a_network_added_later(conn):
     """An activity outside every known network at sync time keeps its raw
     track, so adding a network later and reclassifying can still claim it --
