@@ -149,3 +149,20 @@ def test_import_applies_exclusions_and_drops_them_from_totals(conn):
     ], exclusions=rules)
     assert (report.stored, report.counted, report.excluded) == (2, 1, 1)
     assert report.counted_m == pytest.approx(30.0)
+
+
+def test_import_applies_exclusions_to_its_own_network_only(conn):
+    """A real bug: import_layer's own exclusion-reapply call used to ignore
+    which network was importing, always defaulting to ptc -- a second
+    network's import would look for its exclusion rule's object_id among
+    ptc's segments, find nothing, and warn instead of excluding."""
+    run_import(conn, "road", [road(1, line((0, 0), (30, 0)))])   # ptc, unrelated
+
+    add_network(conn, "testworld")
+    rules = excl.parse({"roads": [{"object_id": 101, "reason": "Gated"}]})
+    report = run_import(conn, "road", [road(101, line((0, 0), (30, 0)))],
+                        exclusions=rules, network="testworld")
+    assert report.excluded == 1
+    assert report.exclusion_warnings == []
+    assert segment(conn, 101, "road")["excluded"] is True
+    assert segment(conn, 1, "road")["excluded"] is False
