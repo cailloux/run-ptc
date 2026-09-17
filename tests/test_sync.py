@@ -3,8 +3,9 @@ from datetime import UTC, date, datetime
 
 import pytest
 
+from app.matching import reclassify_unmatched
 from app.sync import default_window, month_windows, sync, today_eastern
-from tests.helpers import SETTINGS, X0, Y0, cartpath, line, run_import
+from tests.helpers import SETTINGS, X0, Y0, add_network, cartpath, line, network_id, run_import
 
 
 # ---- dates (no database) -----------------------------------------------------
@@ -147,7 +148,8 @@ def test_runs_are_classified_against_the_city_bounding_box(conn):
     status, start_at, parts, points, raw_null = activity(conn, "i1")
     assert (status, parts, points) == ("city", 1, 41)
     assert start_at == datetime(2024, 5, 4, 12, 0, tzinfo=UTC)
-    assert activity(conn, "i2")[0] == "outside" and activity(conn, "i2")[4] is True
+    # 'outside' still keeps its raw track, so a future network can reclassify it.
+    assert activity(conn, "i2")[0] == "outside" and activity(conn, "i2")[4] is False
     # The straight line across the city is a GPS gap, not running.
     assert activity(conn, "i3")[0] == "outside"
     assert activity(conn, "i4")[:3:2] == ("city", 2)
@@ -224,3 +226,28 @@ def test_sync_asks_for_explicit_month_windows(conn):
 def test_sync_needs_the_city_imported_first(conn):
     with pytest.raises(RuntimeError, match="city import"):
         do_sync(conn, FakeIntervals([], {}))
+
+
+def test_reclassify_unmatched_picks_up_a_network_added_later(conn):
+    """An activity outside every known network at sync time keeps its raw
+    track, so adding a network later and reclassifying can still claim it --
+    no Intervals refetch needed."""
+    city(conn)
+    tracks = {"i1": walk(conn, (3000, 3000), (3400, 3000))}
+    do_sync(conn, FakeIntervals([run("i1")], tracks))
+    assert activity(conn, "i1")[0] == "outside"
+
+    add_network(conn, "testworld")
+    # Distinct OIDs from city()'s: segment's (layer, source_key) unique
+    # constraint isn't network-scoped until a later migration, so reusing 1/2
+    # here would overwrite PTC's own cartpath rows instead of adding new ones.
+    run_import(conn, "cartpath", [
+        cartpath(101, line((3000, 2900), (3400, 2900))),
+        cartpath(102, line((3000, 3100), (3400, 3100))),
+    ], network="testworld")
+
+    assert reclassify_unmatched(conn) == 1
+    status = activity(conn, "i1")[0]
+    matched_network = conn.execute(
+        "SELECT network_id FROM activity WHERE intervals_id = 'i1'").fetchone()[0]
+    assert (status, matched_network) == ("city", network_id(conn, "testworld"))

@@ -26,7 +26,7 @@ def add_run(conn, intervals_id, *waypoints, start="2024-05-04T12:00:00+00:00", r
     wkt = "LINESTRING(" + ", ".join(f"{X0 + x} {Y0 + y}" for x, y in points) + ")"
     activity_id = conn.execute("""
         INSERT INTO activity (intervals_id, start_at, sport, status, track_raw, geom, network_id)
-        VALUES (%(id)s, %(start)s, 'Run', 'city', ST_GeomFromText(%(wkt)s, 32616),
+        VALUES (%(id)s, %(start)s, 'Run', 'city', ST_Transform(ST_GeomFromText(%(wkt)s, 32616), 4326),
                 split_track(ST_GeomFromText(%(wkt)s, 32616), %(gap)s), %(network_id)s)
         RETURNING id
     """, {"id": intervals_id, "start": datetime.fromisoformat(start), "wkt": wkt,
