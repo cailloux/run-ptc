@@ -117,3 +117,33 @@ def test_read_endpoints_stay_isolated_per_network(api, conn, network, monkeypatc
     tw_status = client.get("/status", params={"network": "testworld"}).json()
     assert (ptc_status["sources"]["city"]["layers"]["cartpath"]["stored"],
             tw_status["sources"]["city"]["layers"]["cartpath"]["stored"]) == (3, 2)
+
+
+def test_route_endpoints_use_the_requested_network(api, conn, network, monkeypatch):
+    """The already-scoped functions behind /route/* and /graph/islands were
+    proven correct at the unit level in steps 7/8/10 -- what's untested is
+    the API layer's own network param: it could silently default to ptc
+    while looking like it worked, no matter what a caller asks for."""
+    client, _ = api
+    # config/settings.yaml only has a real "ptc" block, same limitation as
+    # test_read_endpoints_stay_isolated_per_network above.
+    monkeypatch.setattr("app.api.load_settings", lambda network="ptc": SETTINGS)
+    add_network(conn, "testworld")
+    # Far from ptc's fixture (near 0,0): if ?network= were ignored, this
+    # click would be nowhere near ptc's network at all.
+    run_import(conn, "cartpath", [cartpath(101, line((1000, 1000), (1100, 1000)))], network="testworld")
+    build_graph(conn, SETTINGS, network="testworld")
+
+    resp = client.post("/route/snap", params={"network": "testworld"},
+                       json=point(conn, 1050, 1004))
+    assert resp.status_code == 200
+    assert resp.json() == pytest.approx(point(conn, 1050, 1000), abs=1e-7)
+
+    resp = client.post("/route/leg", params={"network": "testworld"},
+                       json={"from": point(conn, 1010, 1000), "to": point(conn, 1090, 1000)})
+    assert resp.status_code == 200
+    assert resp.json()["length_m"] == pytest.approx(80, abs=0.1)
+
+    # ptc's fixture has one island (source_oid 3); testworld's single line has none.
+    islands = client.get("/graph/islands", params={"network": "testworld"}).json()["features"]
+    assert islands == []
