@@ -168,6 +168,21 @@ def test_networks_are_imported_independently(conn):
         == network_id(conn, "testworld")
 
 
+def test_import_assigns_node_radii_for_its_own_network_without_a_recompute(conn):
+    """A real bug: regenerate_nodes() (called by import_layer after every
+    import) called assign_radii()/match() without threading network
+    through, so they silently defaulted to "ptc". For any other network,
+    assign_radii's WHERE (network_id = ptc's id AND id IN these segments)
+    matched nothing -- radius_m stayed NULL, and a NULL radius makes
+    ST_DWithin's match condition NULL (not true), so those nodes could
+    never be hit until a full recompute happened to fix it up."""
+    add_network(conn, "testworld")
+    run_import(conn, "cartpath", [cartpath(101, line((0, 0), (100, 0)))], network="testworld")
+    radii = [r for (r,) in conn.execute(
+        "SELECT n.radius_m FROM node n JOIN segment s ON s.id = n.segment_id WHERE s.source_oid = 101")]
+    assert radii and all(r is not None for r in radii)
+
+
 def test_empty_response_refuses_to_import(conn):
     run_import(conn, "cartpath", [cartpath(1, line((0, 0), (40, 0)))])
     with pytest.raises(RuntimeError, match="no features"):

@@ -204,7 +204,8 @@ WHERE s.id = ANY(%(ids)s) AND s.counted AND ST_Length(d.geom) >= %(min_part)s
 """
 
 
-def regenerate_nodes(conn: psycopg.Connection, segment_ids: list[int], settings: Settings) -> None:
+def regenerate_nodes(conn: psycopg.Connection, segment_ids: list[int], settings: Settings,
+                     network: str = "ptc") -> None:
     """Replace the nodes of these segments and match them against every stored run."""
     if not segment_ids:
         return
@@ -214,8 +215,8 @@ def regenerate_nodes(conn: psycopg.Connection, segment_ids: list[int], settings:
         "spacing": settings.node_spacing_m,
         "min_part": settings.min_part_length_m,
     })
-    assign_radii(conn, settings, segment_ids=segment_ids)
-    match(conn, settings, segment_ids=segment_ids)
+    assign_radii(conn, settings, network=network, segment_ids=segment_ids)
+    match(conn, settings, network=network, segment_ids=segment_ids)
 
 
 def import_layer(conn: psycopg.Connection, layer: Layer, features: list[dict],
@@ -360,7 +361,7 @@ def import_layer(conn: psycopg.Connection, layer: Layer, features: list[dict],
                 WHERE id = ANY(%(added)s) OR id = ANY(%(changed)s)
             """, {"added": added_ids, "changed": changed_ids})
 
-        regenerate_nodes(conn, added_ids + changed_ids, settings)
+        regenerate_nodes(conn, added_ids + changed_ids, settings, network=network)
         report.exclusion_warnings = excl.apply(conn, exclusions, network=network)
 
         report.tiny_parts = conn.execute("""
