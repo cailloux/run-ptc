@@ -22,22 +22,31 @@ LAYER_LABEL = {"cartpath": "cart paths", "road": "roads"}
 LIST_CAP = 25   # segments listed per added/changed/removed list
 
 
-def stored_signature(conn: psycopg.Connection, layer: str) -> LayerSignature | None:
+def _network_id(conn: psycopg.Connection, network: str) -> int:
+    row = conn.execute("SELECT id FROM network WHERE slug = %s", (network,)).fetchone()
+    if row is None:
+        raise RuntimeError(f"no network with slug {network!r}")
+    return row[0]
+
+
+def stored_signature(conn: psycopg.Connection, layer: str, network: str = "ptc") -> LayerSignature | None:
     row = conn.execute(
-        "SELECT feature_count, max_oid, max_edited_at FROM source_signature WHERE layer = %s",
-        (layer,),
+        "SELECT feature_count, max_oid, max_edited_at FROM source_signature"
+        " WHERE layer = %s AND network_id = %s",
+        (layer, _network_id(conn, network)),
     ).fetchone()
     return LayerSignature(*row) if row else None
 
 
-def store_signature(conn: psycopg.Connection, layer: str, sig: LayerSignature) -> None:
+def store_signature(conn: psycopg.Connection, layer: str, sig: LayerSignature, network: str = "ptc") -> None:
     conn.execute("""
-        INSERT INTO source_signature (layer, feature_count, max_oid, max_edited_at, imported_at)
-        VALUES (%s, %s, %s, %s, now())
-        ON CONFLICT (layer) DO UPDATE SET
+        INSERT INTO source_signature (network_id, layer, feature_count, max_oid, max_edited_at, imported_at)
+        VALUES (%(network_id)s, %(layer)s, %(feature_count)s, %(max_oid)s, %(max_edited_at)s, now())
+        ON CONFLICT (network_id, layer) DO UPDATE SET
             feature_count = EXCLUDED.feature_count, max_oid = EXCLUDED.max_oid,
             max_edited_at = EXCLUDED.max_edited_at, imported_at = EXCLUDED.imported_at
-    """, (layer, sig.feature_count, sig.max_oid, sig.max_edited_at))
+    """, {"network_id": _network_id(conn, network), "layer": layer, "feature_count": sig.feature_count,
+          "max_oid": sig.max_oid, "max_edited_at": sig.max_edited_at})
 
 
 @dataclass

@@ -19,6 +19,16 @@ def test_linestring_is_stored_as_utm_multilinestring(conn):
     assert s["source_key"] == global_id(1)
 
 
+def test_wrong_srid_geometry_is_rejected_by_the_trigger(conn):
+    with pytest.raises(Exception, match="does not match"):
+        conn.execute("""
+            INSERT INTO segment (network_id, layer, source_key, source_oid, counted,
+                                 length_m, geom_hash, props, geom)
+            VALUES (%(network_id)s, 'cartpath', 'bad', 999, true, 10, 'x', '{}',
+                    ST_GeomFromText('MULTILINESTRING((0 0, 10 0))', 4326))
+        """, {"network_id": network_id(conn)})
+
+
 def test_imported_segment_gets_the_network_id(conn):
     run_import(conn, "cartpath", [cartpath(1, line((0, 0), (30, 40)))])
     stored = conn.execute("SELECT network_id FROM segment WHERE source_oid = 1").fetchone()[0]
