@@ -7,7 +7,7 @@ import pytest
 from app import exclusions as excl
 from app.matching import match, metrics, near_misses, rebuild_pieces, recompute
 from app.sync import sync
-from tests.helpers import SETTINGS, X0, Y0, cartpath, global_id, line, network_id, road, run_import
+from tests.helpers import SETTINGS, X0, Y0, add_network, cartpath, global_id, line, network_id, road, run_import
 from tests.test_sync import FakeIntervals, city, run, walk
 
 
@@ -20,7 +20,7 @@ def densify(waypoints, step=10.0):
     return points
 
 
-def add_run(conn, intervals_id, *waypoints, start="2024-05-04T12:00:00+00:00", raw=False):
+def add_run(conn, intervals_id, *waypoints, start="2024-05-04T12:00:00+00:00", raw=False, network="ptc"):
     """Store a city run directly from UTM offsets, the way sync would."""
     points = list(waypoints) if raw else densify(waypoints)
     wkt = "LINESTRING(" + ", ".join(f"{X0 + x} {Y0 + y}" for x, y in points) + ")"
@@ -30,7 +30,7 @@ def add_run(conn, intervals_id, *waypoints, start="2024-05-04T12:00:00+00:00", r
                 split_track(ST_GeomFromText(%(wkt)s, 32616), %(gap)s), %(network_id)s)
         RETURNING id
     """, {"id": intervals_id, "start": datetime.fromisoformat(start), "wkt": wkt,
-          "gap": SETTINGS.track_gap_split_m, "network_id": network_id(conn)}).fetchone()[0]
+          "gap": SETTINGS.track_gap_split_m, "network_id": network_id(conn, network)}).fetchone()[0]
     rebuild_pieces(conn, [activity_id])
     return activity_id
 
@@ -271,6 +271,29 @@ def test_reimported_segment_is_matched_against_stored_runs(conn):
 
 
 # ---- near misses ------------------------------------------------------------------
+
+
+def test_two_networks_do_not_cross_credit_hits_with_identical_geometry(conn):
+    """The node<->activity_piece join is purely spatial; only network_id
+    correlation keeps two networks' runs from crediting each other's nodes.
+    Uses identical geometry for both networks -- the actual stress case,
+    not just physically separate coordinates."""
+    run_import(conn, "cartpath", [cartpath(1, line((0, 0), (100, 0)))])
+    add_network(conn, "testworld")
+    run_import(conn, "cartpath", [cartpath(101, line((0, 0), (100, 0)))], network="testworld")
+
+    add_run(conn, "ptc-run", (0, 0), (100, 0), network="ptc")
+    add_run(conn, "tw-run", (0, 0), (100, 0), network="testworld")
+
+    recompute(conn, SETTINGS, network="ptc")
+    recompute(conn, SETTINGS, network="testworld")
+
+    assert set(hits(conn, 1)) == {"ptc-run"}
+    assert set(hits(conn, 101)) == {"tw-run"}
+
+    ptc_metrics, tw_metrics = metrics(conn, "ptc"), metrics(conn, "testworld")
+    assert (ptc_metrics.segments_complete, ptc_metrics.segments_total) == (1, 1)
+    assert (tw_metrics.segments_complete, tw_metrics.segments_total) == (1, 1)
 
 
 def test_near_misses_bucket_missed_nodes_by_distance(conn):

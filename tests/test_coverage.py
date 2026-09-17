@@ -2,7 +2,7 @@ import json
 
 from app import exclusions as excl
 from app.coverage import coverage_geojson
-from tests.helpers import cartpath, global_id, line, road, run_import
+from tests.helpers import add_network, cartpath, global_id, line, road, run_import
 from tests.test_matching import set_hits
 
 # Nodes on a 100 m straight part sit at x = 0, 20, ... 100 (seq 0-5), so every
@@ -78,3 +78,16 @@ def test_popup_fields(conn):
     props = json.loads(coverage_geojson(conn, "cartpath"))["features"][0]["properties"]
     assert (props["nodes_hit"], props["nodes_total"], props["segment_length_m"], props["parts"]) == (
         2, 6, 100.0, 1)
+
+
+def test_networks_never_see_each_others_coverage(conn):
+    run_import(conn, "cartpath", [cartpath(1, STRAIGHT)])
+    add_network(conn, "testworld")
+    run_import(conn, "cartpath", [cartpath(101, STRAIGHT)], network="testworld")
+
+    ptc_oids = {f["properties"]["source_oid"] for f in
+                json.loads(coverage_geojson(conn, "cartpath", "ptc"))["features"]}
+    tw_oids = {f["properties"]["source_oid"] for f in
+               json.loads(coverage_geojson(conn, "cartpath", "testworld"))["features"]}
+    assert ptc_oids == {1}
+    assert tw_oids == {101}
