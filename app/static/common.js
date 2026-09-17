@@ -3,6 +3,10 @@
 
 const METERS_PER_MILE = 1609.344;
 
+// No picker yet (Phase A ships no user-facing multi-network feature); every
+// request goes to this one network until a later phase adds a way to switch.
+const DEFAULT_NETWORK = 'ptc';
+
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 }
@@ -12,7 +16,8 @@ function formatEastern(iso, opts = { dateStyle: 'medium', timeStyle: 'short' }) 
 }
 
 async function getJson(url, options, parse = (r) => r.json()) {
-  const resp = await fetch(url, options);
+  const sep = url.includes('?') ? '&' : '?';
+  const resp = await fetch(`${url}${sep}network=${DEFAULT_NETWORK}`, options);
   if (!resp.ok) {
     const body = await resp.json().catch(() => ({}));
     throw new Error(body.detail ?? `${url}: ${resp.status}`);
