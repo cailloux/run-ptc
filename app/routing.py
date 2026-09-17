@@ -9,16 +9,24 @@ from dataclasses import dataclass
 
 import psycopg
 
-EDGES_SQL = "SELECT id, source, target, cost, reverse_cost FROM route_edge"
+
+def network_row(conn: psycopg.Connection, network: str) -> tuple[int, int]:
+    """(id, srid) for a network slug."""
+    row = conn.execute("SELECT id, srid FROM network WHERE slug = %s", (network,)).fetchone()
+    if row is None:
+        raise RuntimeError(f"no network with slug {network!r}")
+    return row
 
 
-def point_expr(lon: str = "%(lon)s", lat: str = "%(lat)s") -> str:
+def edges_sql(network_id: int) -> str:
+    """network_id is our own resolved integer, safe to interpolate -- pgRouting
+    functions take this as a plain SQL-text argument, no parameterized form exists."""
+    return f"SELECT id, source, target, cost, reverse_cost FROM route_edge WHERE network_id = {network_id}"
+
+
+def point_expr(lon: str = "%(lon)s", lat: str = "%(lat)s", srid: int = 32616) -> str:
     """SQL transforming a lon/lat pair (params or column refs) into the graph's SRID."""
-    return f"ST_Transform(ST_SetSRID(ST_MakePoint({lon}, {lat}), 4326), 32616)"
-
-
-# A click's position in the graph's SRID.
-_POINT = point_expr()
+    return f"ST_Transform(ST_SetSRID(ST_MakePoint({lon}, {lat}), 4326), {srid})"
 
 
 class RouteError(ValueError):
@@ -38,18 +46,21 @@ class Snap:
     lon: float
 
 
-def snap(conn: psycopg.Connection, lat: float, lon: float, max_m: float) -> Snap:
-    if conn.execute("SELECT NOT EXISTS (SELECT 1 FROM route_edge)").fetchone()[0]:
+def snap(conn: psycopg.Connection, lat: float, lon: float, max_m: float, network: str = "ptc") -> Snap:
+    network_id, srid = network_row(conn, network)
+    if conn.execute("SELECT NOT EXISTS (SELECT 1 FROM route_edge WHERE network_id = %s)",
+                    (network_id,)).fetchone()[0]:
         raise GraphMissing("the routing graph hasn't been built; run python -m app.cli graph")
     row = conn.execute(f"""
         SELECT c.edge_id, c.fraction, v.component,
                ST_Y(ST_Transform(ST_LineInterpolatePoint(e.geom, c.fraction), 4326)),
                ST_X(ST_Transform(ST_LineInterpolatePoint(e.geom, c.fraction), 4326))
-        FROM pgr_findCloseEdges(%(edges)s, {_POINT}, %(max_m)s) c
-        JOIN route_edge e ON e.id = c.edge_id
-        JOIN route_vertex v ON v.id = e.source
+        FROM pgr_findCloseEdges(%(edges)s, {point_expr(srid=srid)}, %(max_m)s) c
+        JOIN route_edge e ON e.id = c.edge_id AND e.network_id = %(network_id)s
+        JOIN route_vertex v ON v.id = e.source AND v.network_id = e.network_id
         ORDER BY c.distance LIMIT 1
-    """, {"edges": "SELECT id, geom FROM route_edge", "lat": lat, "lon": lon, "max_m": max_m}).fetchone()
+    """, {"edges": f"SELECT id, geom FROM route_edge WHERE network_id = {network_id}",
+          "lat": lat, "lon": lon, "max_m": max_m, "network_id": network_id}).fetchone()
     if row is None:
         raise RouteError(f"that spot is more than {max_m:g} m from any path or road")
     return Snap(*row)
@@ -64,9 +75,10 @@ class Leg:
 
 
 def leg(conn: psycopg.Connection, start: tuple[float, float], end: tuple[float, float],
-        max_m: float) -> Leg:
+        max_m: float, network: str = "ptc") -> Leg:
     """Shortest path between two clicked points, starting and ending on them."""
-    a, b = snap(conn, *start, max_m), snap(conn, *end, max_m)
+    network_id, _ = network_row(conn, network)
+    a, b = snap(conn, *start, max_m, network), snap(conn, *end, max_m, network)
     if a.component != b.component:
         raise RouteError("no path or road connects those two points (one of them is on an island)")
     if a.edge_id == b.edge_id and abs(a.fraction - b.fraction) < 1e-9:
@@ -79,7 +91,7 @@ def leg(conn: psycopg.Connection, start: tuple[float, float], end: tuple[float, 
     )
     path = conn.execute(
         "SELECT seq, node, edge FROM pgr_withPoints(%s, %s, -1, -2, directed => true) ORDER BY seq",
-        (EDGES_SQL, points_sql),
+        (edges_sql(network_id), points_sql),
     ).fetchall()
     if not path:
         raise RouteError("no route found between those points")
@@ -94,9 +106,10 @@ def leg(conn: psycopg.Connection, start: tuple[float, float], end: tuple[float, 
     row = conn.execute("""
         WITH pts AS (
             SELECT -1::bigint AS node, ST_LineInterpolatePoint(ea.geom, %(fa)s) AS pt
-            FROM route_edge ea WHERE ea.id = %(ea)s
+            FROM route_edge ea WHERE ea.id = %(ea)s AND ea.network_id = %(network_id)s
             UNION ALL
-            SELECT -2, ST_LineInterpolatePoint(eb.geom, %(fb)s) FROM route_edge eb WHERE eb.id = %(eb)s
+            SELECT -2, ST_LineInterpolatePoint(eb.geom, %(fb)s) FROM route_edge eb
+            WHERE eb.id = %(eb)s AND eb.network_id = %(network_id)s
         ), steps AS (
             SELECT * FROM unnest(%(seqs)s::int[], %(nodes)s::bigint[], %(edges)s::bigint[],
                                  %(next)s::bigint[]) AS s(seq, node, edge, next_node)
@@ -105,9 +118,11 @@ def leg(conn: psycopg.Connection, start: tuple[float, float], end: tuple[float, 
             SELECT s.seq, e.geom, s.node, s.next_node,
                    ST_LineLocatePoint(e.geom, coalesce(p1.pt, v1.geom)) AS f1,
                    ST_LineLocatePoint(e.geom, coalesce(p2.pt, v2.geom)) AS f2
-            FROM steps s JOIN route_edge e ON e.id = s.edge
-            LEFT JOIN pts p1 ON p1.node = s.node LEFT JOIN route_vertex v1 ON v1.id = s.node
-            LEFT JOIN pts p2 ON p2.node = s.next_node LEFT JOIN route_vertex v2 ON v2.id = s.next_node
+            FROM steps s JOIN route_edge e ON e.id = s.edge AND e.network_id = %(network_id)s
+            LEFT JOIN pts p1 ON p1.node = s.node
+            LEFT JOIN route_vertex v1 ON v1.id = s.node AND v1.network_id = %(network_id)s
+            LEFT JOIN pts p2 ON p2.node = s.next_node
+            LEFT JOIN route_vertex v2 ON v2.id = s.next_node AND v2.network_id = %(network_id)s
         ), pieces AS (
             SELECT seq, CASE
                 -- A loop edge walked junction to junction is the whole loop.
@@ -121,7 +136,8 @@ def leg(conn: psycopg.Connection, start: tuple[float, float], end: tuple[float, 
         )
         SELECT ST_AsGeoJSON(ST_Transform(geom, 4326), 7)::json, ST_Length(geom) FROM line
     """, {"fa": a.fraction, "ea": a.edge_id, "fb": b.fraction, "eb": b.edge_id,
-          "seqs": seqs, "nodes": nodes, "edges": edges, "next": next_nodes}).fetchone()
+          "seqs": seqs, "nodes": nodes, "edges": edges, "next": next_nodes,
+          "network_id": network_id}).fetchone()
     geojson, length_m = row
     coords = geojson["coordinates"] if geojson["type"] == "LineString" else [geojson["coordinates"]]
     return Leg([(lat, lon) for lon, lat in coords], length_m, a, b)

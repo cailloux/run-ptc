@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 import psycopg
 
-from app.routing import point_expr
+from app.routing import network_row, point_expr
 
 FIT_EPOCH = 631065600   # Unix seconds at 1989-12-31T00:00:00Z, the FIT epoch
 SEMICIRCLE = 2 ** 31 / 180   # degrees -> semicircles
@@ -148,7 +148,7 @@ def _refine(cue: str, out_bearing: float, branch_bearings: list[float], settings
 
 
 def find_course_points(conn: psycopg.Connection, latlngs: list[LatLng], settings,
-                       cum_m: list[float] | None = None) -> list[CoursePoint]:
+                       cum_m: list[float] | None = None, network: str = "ptc") -> list[CoursePoint]:
     """Decision points (graph vertices of degree >= 3) the route passes,
     classified from the line's own bearings, adjusted for other branches at
     the junction (see _refine), one cue per real intersection.
@@ -170,21 +170,23 @@ def find_course_points(conn: psycopg.Connection, latlngs: list[LatLng], settings
     Once the route builder carries junctions through edits (per the spec),
     building this straight from that sequence removes the snap step.
     """
+    network_id, srid = network_row(conn, network)
     lats = [p[0] for p in latlngs]
     lons = [p[1] for p in latlngs]
     rows = conn.execute(f"""
         WITH p AS (
-            SELECT i, {point_expr("lon", "lat")} AS pt
+            SELECT i, {point_expr("lon", "lat", srid)} AS pt
             FROM unnest(%(lats)s::float8[], %(lons)s::float8[]) WITH ORDINALITY AS t(lat, lon, i)
         )
         SELECT p.i, e.source, e.target, e.layer
         FROM p CROSS JOIN LATERAL (
             SELECT re.source, re.target, s.layer, re.geom
             FROM route_edge re JOIN segment s ON s.id = re.segment_id
-            WHERE ST_DWithin(re.geom, p.pt, %(snap_m)s) ORDER BY re.geom <-> p.pt LIMIT 1
+            WHERE re.network_id = %(network_id)s AND ST_DWithin(re.geom, p.pt, %(snap_m)s)
+            ORDER BY re.geom <-> p.pt LIMIT 1
         ) e
         ORDER BY p.i
-    """, {"lats": lats, "lons": lons, "snap_m": settings.fit_snap_m}).fetchall()
+    """, {"lats": lats, "lons": lons, "snap_m": settings.fit_snap_m, "network_id": network_id}).fetchall()
 
     # (source, target, start_i, end_i, layer), 0-based.
     runs: list[tuple[int, int, int, int, str]] = []
@@ -217,19 +219,21 @@ def find_course_points(conn: psycopg.Connection, latlngs: list[LatLng], settings
     neighbour_layer: dict[int, dict[int, str]] = {}
     for v, nbr, layer in conn.execute("""
         SELECT v, nbr, s.layer FROM (
-            SELECT source AS v, target AS nbr, segment_id FROM route_edge WHERE source = ANY(%(vids)s)
+            SELECT source AS v, target AS nbr, segment_id FROM route_edge
+            WHERE network_id = %(network_id)s AND source = ANY(%(vids)s)
             UNION
-            SELECT target AS v, source AS nbr, segment_id FROM route_edge WHERE target = ANY(%(vids)s)
+            SELECT target AS v, source AS nbr, segment_id FROM route_edge
+            WHERE network_id = %(network_id)s AND target = ANY(%(vids)s)
         ) x JOIN segment s ON s.id = x.segment_id
-    """, {"vids": vids}).fetchall():
+    """, {"vids": vids, "network_id": network_id}).fetchall():
         neighbours.setdefault(v, set()).add(nbr)
         neighbour_layer.setdefault(v, {})[nbr] = layer
 
     all_vids = sorted(set(vids) | {n for s in neighbours.values() for n in s})
     vertex_ll: dict[int, LatLng] = {row[0]: (row[1], row[2]) for row in conn.execute("""
         SELECT id, ST_Y(ST_Transform(geom, 4326)), ST_X(ST_Transform(geom, 4326))
-        FROM route_vertex WHERE id = ANY(%(vids)s)
-    """, {"vids": all_vids}).fetchall()}
+        FROM route_vertex WHERE id = ANY(%(vids)s) AND network_id = %(network_id)s
+    """, {"vids": all_vids, "network_id": network_id}).fetchall()}
 
     decisions = [j for j in junctions if len(neighbours.get(j[0], ())) >= 3]
     if not decisions:
@@ -255,8 +259,9 @@ def find_course_points(conn: psycopg.Connection, latlngs: list[LatLng], settings
 
     for a, b in conn.execute("""
         SELECT source, target FROM route_edge
-        WHERE source = ANY(%(vids)s) AND target = ANY(%(vids)s) AND length_m <= %(cluster_m)s
-    """, {"vids": dvids, "cluster_m": settings.fit_cluster_m}).fetchall():
+        WHERE network_id = %(network_id)s AND source = ANY(%(vids)s) AND target = ANY(%(vids)s)
+          AND length_m <= %(cluster_m)s
+    """, {"vids": dvids, "cluster_m": settings.fit_cluster_m, "network_id": network_id}).fetchall():
         ra, rb = find(a), find(b)
         if ra != rb:
             parent[ra] = rb

@@ -4,7 +4,7 @@ import pytest
 
 from app.graph import build_graph
 from app.routing import GraphMissing, RouteError, leg, snap
-from tests.helpers import SETTINGS, X0, Y0, cartpath, line, road, run_import
+from tests.helpers import SETTINGS, X0, Y0, add_network, cartpath, line, road, run_import
 
 MAX_M = SETTINGS.route_snap_max_m
 
@@ -132,3 +132,29 @@ def test_same_point_is_a_zero_length_leg(conn):
     build(conn, [cartpath(1, line((0, 0), (100, 0)))])
     r = route(conn, (30, 0), (30, 0))
     assert r.length_m == 0 and len(r.latlngs) == 1
+
+
+def test_two_networks_snap_and_route_without_cross_contamination(conn):
+    """route_edge/route_vertex ids repeat across networks (step 7's composite
+    PK); identical geometry between two networks is the real stress case for
+    every join in snap()/leg()."""
+    build(conn, [cartpath(1, line((0, 0), (100, 0)))])
+    add_network(conn, "testworld")
+    run_import(conn, "cartpath", [cartpath(101, line((0, 0), (100, 0)))], network="testworld")
+    build_graph(conn, SETTINGS, network="testworld")
+
+    ptc_snap = snap(conn, *latlon(conn, 50, 0), MAX_M, "ptc")
+    tw_snap = snap(conn, *latlon(conn, 50, 0), MAX_M, "testworld")
+
+    def owning_oid(edge_id, network):
+        return conn.execute(
+            "SELECT s.source_oid FROM route_edge e JOIN segment s ON s.id = e.segment_id"
+            " WHERE e.id = %s AND e.network_id = (SELECT id FROM network WHERE slug = %s)",
+            (edge_id, network),
+        ).fetchone()[0]
+
+    assert owning_oid(ptc_snap.edge_id, "ptc") == 1
+    assert owning_oid(tw_snap.edge_id, "testworld") == 101
+
+    r = route(conn, (10, 0), (90, 0))   # default network="ptc"
+    assert round(r.length_m) == 80

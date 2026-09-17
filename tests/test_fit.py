@@ -12,7 +12,7 @@ from app.fit import (
     turn_angle,
 )
 from app.graph import build_graph
-from tests.helpers import SETTINGS, cartpath, line, road, run_import
+from tests.helpers import SETTINGS, add_network, cartpath, line, road, run_import
 from tests.test_routing import latlon
 
 THRESHOLDS = SETTINGS.fit_turn_thresholds_deg   # {straight: 20, slight: 45, turn: 135, sharp: 170}
@@ -113,6 +113,27 @@ def test_a_real_turn_at_a_junction_gets_a_turn_cue(conn):
         cartpath(3, line((100, 0), (100, -60))),     # unused branch
     ])
     cps = find_course_points(conn, trace(conn, (0, 0), (100, 0), (100, 60)), SETTINGS)
+    assert [cp.type for cp in cps] == ["left"]
+
+
+def test_two_networks_course_points_without_cross_contamination(conn):
+    """find_course_points joins route_edge/route_vertex directly; identical
+    geometry between two networks (step 7's composite PK means edge/vertex
+    ids repeat across networks) is the real stress case."""
+    build(conn, [
+        cartpath(1, line((0, 0), (100, 0))),
+        cartpath(2, line((100, 0), (100, 60))),
+        cartpath(3, line((100, 0), (100, -60))),
+    ])
+    add_network(conn, "testworld")
+    run_import(conn, "cartpath", [
+        cartpath(101, line((0, 0), (100, 0))),
+        cartpath(102, line((100, 0), (100, 60))),
+        cartpath(103, line((100, 0), (100, -60))),
+    ], network="testworld")
+    build_graph(conn, SETTINGS, network="testworld")
+
+    cps = find_course_points(conn, trace(conn, (0, 0), (100, 0), (100, 60)), SETTINGS, network="testworld")
     assert [cp.type for cp in cps] == ["left"]
 
 
