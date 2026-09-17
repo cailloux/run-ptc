@@ -1,7 +1,7 @@
 import pytest
 
-from app.graph import build_graph
-from tests.helpers import SETTINGS, cartpath, line, road, run_import
+from app.graph import build_graph, graph_report
+from tests.helpers import SETTINGS, add_network, cartpath, line, road, run_import
 
 
 def graph(conn, cartpaths=(), roads=()):
@@ -139,3 +139,23 @@ def test_edge_fractions_map_nodes_onto_edges(conn):
         ORDER BY n.seq
     """).fetchall()
     assert rows == [(0, 0.0), (1, 0.0), (2, 0.0), (3, 0.5), (4, 0.5)]
+
+
+def test_two_networks_graphs_coexist_without_id_collisions(conn):
+    """route_edge/route_vertex ids restart at 1 for every build_graph() call,
+    so a second network's graph must not collide with (or wipe) the first's."""
+    ptc_report = graph(conn, [cartpath(1, line((0, 0), (100, 0)))])
+
+    add_network(conn, "testworld")
+    run_import(conn, "cartpath", [cartpath(101, line((0, 0), (200, 0)))], network="testworld")
+    testworld_report = build_graph(conn, SETTINGS, network="testworld")
+
+    assert (ptc_report.edges, ptc_report.vertices) == (1, 2)
+    assert (testworld_report.edges, testworld_report.vertices) == (1, 2)
+
+    # Rebuilding testworld's graph must not have deleted or altered ptc's.
+    assert graph_report(conn, "ptc").edges == 1
+    assert edges(conn) == [
+        ("cartpath:1", 0, 0.0, 1.0, 100.0),
+        ("cartpath:101", 0, 0.0, 1.0, 200.0),
+    ]

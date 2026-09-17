@@ -247,13 +247,15 @@ def route_fit(body: FitRequest) -> Response:
 @router.get("/graph/islands")
 def graph_islands() -> Response:
     """Edges not connected to the main network, for review."""
+    network = "ptc"
     with db.connect() as conn:
-        main = main_component(conn)
+        main = main_component(conn, network)
+        network_id = conn.execute("SELECT id FROM network WHERE slug = %s", (network,)).fetchone()[0]
         body = conn.execute("""
             WITH island AS (
                 SELECT v.component, sum(e.length_m) AS length_m
-                FROM route_edge e JOIN route_vertex v ON v.id = e.source
-                WHERE v.component IS DISTINCT FROM %(main)s
+                FROM route_edge e JOIN route_vertex v ON v.id = e.source AND v.network_id = e.network_id
+                WHERE e.network_id = %(network_id)s AND v.component IS DISTINCT FROM %(main)s
                 GROUP BY v.component
             )
             SELECT json_build_object('type', 'FeatureCollection', 'features',
@@ -269,10 +271,11 @@ def graph_islands() -> Response:
                         'seg_type', s.seg_type)
                 ) ORDER BY i.component, e.id), '[]'::json))::text
             FROM route_edge e
-            JOIN route_vertex v ON v.id = e.source
+            JOIN route_vertex v ON v.id = e.source AND v.network_id = e.network_id
             JOIN island i ON i.component = v.component
             JOIN segment s ON s.id = e.segment_id
-        """, {"main": main}).fetchone()[0]
+            WHERE e.network_id = %(network_id)s
+        """, {"main": main, "network_id": network_id}).fetchone()[0]
     return Response(body, media_type="application/geo+json")
 
 

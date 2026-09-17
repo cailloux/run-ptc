@@ -50,10 +50,18 @@ class GraphReport:
         return lines
 
 
-def build_graph(conn: psycopg.Connection, settings: Settings) -> GraphReport:
-    """Replace route_edge and route_vertex from the current segments."""
+def _network_id(conn: psycopg.Connection, network: str) -> int:
+    row = conn.execute("SELECT id FROM network WHERE slug = %s", (network,)).fetchone()
+    if row is None:
+        raise RuntimeError(f"no network with slug {network!r}")
+    return row[0]
+
+
+def build_graph(conn: psycopg.Connection, settings: Settings, network: str = "ptc") -> GraphReport:
+    """Replace this network's route_edge and route_vertex from its segments."""
     snap = settings.graph_snap_m
     with conn.transaction():
+        network_id = _network_id(conn, network)
         for t in ("g_part", "g_end", "g_cut", "g_piece", "g_piece_end", "g_vertex"):
             conn.execute(f"DROP TABLE IF EXISTS pg_temp.{t}")
 
@@ -63,8 +71,8 @@ def build_graph(conn: psycopg.Connection, settings: Settings) -> GraphReport:
             SELECT row_number() OVER () AS pid, s.id AS segment_id, s.layer, s.seg_type,
                    d.path[1] - 1 AS part_idx, d.geom
             FROM segment s CROSS JOIN LATERAL ST_Dump(s.geom) d
-            WHERE ST_Length(d.geom) >= %s
-        """, (settings.min_part_length_m,))
+            WHERE s.network_id = %(network_id)s AND ST_Length(d.geom) >= %(min_part)s
+        """, {"network_id": network_id, "min_part": settings.min_part_length_m})
         conn.execute("CREATE INDEX ON g_part USING gist (geom)")
         conn.execute("""
             CREATE TEMP TABLE g_end ON COMMIT DROP AS
@@ -125,8 +133,10 @@ def build_graph(conn: psycopg.Connection, settings: Settings) -> GraphReport:
                   UNION ALL SELECT id, 'e', ST_EndPoint(geom) FROM g_piece) x
         """, (snap,))
 
-        conn.execute("DELETE FROM route_edge")
-        conn.execute("DELETE FROM route_vertex")
+        conn.execute("DELETE FROM route_edge WHERE network_id = %(network_id)s",
+                     {"network_id": network_id})
+        conn.execute("DELETE FROM route_vertex WHERE network_id = %(network_id)s",
+                     {"network_id": network_id})
         # Self-loops shorter than the tolerance are slivers that collapsed
         # onto one junction; longer loops (a path around a pond) stay.
         conn.execute("""
@@ -140,13 +150,13 @@ def build_graph(conn: psycopg.Connection, settings: Settings) -> GraphReport:
                 JOIN g_piece_end s ON s.id = p.id AND s.which = 's' JOIN center cs ON cs.cluster = s.cluster
                 JOIN g_piece_end e ON e.id = p.id AND e.which = 'e' JOIN center ce ON ce.cluster = e.cluster
             )
-            INSERT INTO route_edge (id, length_m, cost, reverse_cost, segment_id, part_idx,
-                                    part_from, part_to, geom)
-            SELECT id, ST_Length(geom), ST_Length(geom), ST_Length(geom), segment_id, part_idx,
-                   part_from, part_to, geom
+            INSERT INTO route_edge (network_id, id, length_m, cost, reverse_cost, segment_id,
+                                    part_idx, part_from, part_to, geom)
+            SELECT %(network_id)s, id, ST_Length(geom), ST_Length(geom), ST_Length(geom),
+                   segment_id, part_idx, part_from, part_to, geom
             FROM snapped
-            WHERE NOT (loop AND ST_Length(geom) < %s)
-        """, (snap,))
+            WHERE NOT (loop AND ST_Length(geom) < %(snap)s)
+        """, {"snap": snap, "network_id": network_id})
 
         # Prefer cart paths: a road stretch with a path alongside it, within
         # the road's own match radius (so running the path still completes
@@ -157,7 +167,7 @@ def build_graph(conn: psycopg.Connection, settings: Settings) -> GraphReport:
                        CASE WHEN s.seg_type = ANY(%(wide_classes)s) OR s.name = ANY(%(divided)s)
                             THEN %(wide_m)s ELSE %(road_m)s END AS radius
                 FROM route_edge e JOIN segment s ON s.id = e.segment_id
-                WHERE s.layer = 'road'
+                WHERE s.layer = 'road' AND e.network_id = %(network_id)s
             ), sample AS (
                 -- Points every 5 m along each road edge. (Measuring the share
                 -- this way, with an indexed EXISTS per point, is ~100x faster
@@ -177,7 +187,7 @@ def build_graph(conn: psycopg.Connection, settings: Settings) -> GraphReport:
                 ) THEN 1.0 ELSE 0.0 END) >= %(share)s
             )
             UPDATE route_edge e SET cost = e.length_m * %(factor)s, reverse_cost = e.length_m * %(factor)s
-            FROM alongside a WHERE a.id = e.id
+            FROM alongside a WHERE a.id = e.id AND e.network_id = %(network_id)s
         """, {
             "wide_classes": list(settings.match_radius_wide_road_classes),
             "divided": list(settings.divided_roads),
@@ -185,56 +195,68 @@ def build_graph(conn: psycopg.Connection, settings: Settings) -> GraphReport:
             "road_m": settings.match_radius_road_m,
             "share": PARALLEL_SHARE,
             "factor": settings.route_parallel_road_factor,
+            "network_id": network_id,
         })
 
-        # 4. Junctions and edge ends, from pgRouting.
-        conn.execute("""
+        # 4. Junctions and edge ends, from pgRouting. network_id is our own
+        # resolved integer, safe to interpolate into pgRouting's SQL-text arg.
+        conn.execute(f"""
             CREATE TEMP TABLE g_vertex ON COMMIT DROP AS
             SELECT id, in_edges, out_edges, geom
-            FROM pgr_extractVertices('SELECT id, geom FROM route_edge')
+            FROM pgr_extractVertices('SELECT id, geom FROM route_edge WHERE network_id = {network_id}')
         """)
-        conn.execute("INSERT INTO route_vertex (id, geom) SELECT id, geom FROM g_vertex")
+        conn.execute("INSERT INTO route_vertex (network_id, id, geom) SELECT %(network_id)s, id, geom FROM g_vertex",
+                     {"network_id": network_id})
         conn.execute("""
             WITH src AS (SELECT unnest(out_edges) AS edge, id FROM g_vertex),
                  tgt AS (SELECT unnest(in_edges) AS edge, id FROM g_vertex)
             UPDATE route_edge e SET source = src.id, target = tgt.id
-            FROM src, tgt WHERE src.edge = e.id AND tgt.edge = e.id
-        """)
+            FROM src, tgt WHERE src.edge = e.id AND tgt.edge = e.id AND e.network_id = %(network_id)s
+        """, {"network_id": network_id})
 
         # 5. Islands, from pgRouting.
-        conn.execute("""
+        conn.execute(f"""
             UPDATE route_vertex v SET component = c.component
             FROM pgr_connectedComponents(
-                'SELECT id, source, target, cost, reverse_cost FROM route_edge') c
-            WHERE c.node = v.id
+                'SELECT id, source, target, cost, reverse_cost FROM route_edge WHERE network_id = {network_id}') c
+            WHERE c.node = v.id AND v.network_id = {network_id}
         """)
-        return graph_report(conn)
+        return graph_report(conn, network)
 
 
-def graph_report(conn: psycopg.Connection) -> GraphReport:
+def graph_report(conn: psycopg.Connection, network: str = "ptc") -> GraphReport:
+    network_id = _network_id(conn, network)
     report = GraphReport()
     (report.edges, report.vertices, report.components,
      report.alongside_edges, report.alongside_m) = conn.execute("""
-        SELECT (SELECT count(*) FROM route_edge), (SELECT count(*) FROM route_vertex),
-               (SELECT count(DISTINCT component) FROM route_vertex),
-               (SELECT count(*) FROM route_edge WHERE cost > length_m),
-               (SELECT coalesce(sum(length_m), 0) FROM route_edge WHERE cost > length_m)
-    """).fetchone()
+        SELECT (SELECT count(*) FROM route_edge WHERE network_id = %(network_id)s),
+               (SELECT count(*) FROM route_vertex WHERE network_id = %(network_id)s),
+               (SELECT count(DISTINCT component) FROM route_vertex WHERE network_id = %(network_id)s),
+               (SELECT count(*) FROM route_edge WHERE network_id = %(network_id)s AND cost > length_m),
+               (SELECT coalesce(sum(length_m), 0) FROM route_edge
+                WHERE network_id = %(network_id)s AND cost > length_m)
+    """, {"network_id": network_id}).fetchone()
     rows = conn.execute("""
         SELECT v.component, sum(e.length_m) AS length_m,
                array_agg(DISTINCT s.layer || ':' || s.source_oid ORDER BY s.layer || ':' || s.source_oid)
-        FROM route_edge e JOIN route_vertex v ON v.id = e.source JOIN segment s ON s.id = e.segment_id
+        FROM route_edge e
+        JOIN route_vertex v ON v.id = e.source AND v.network_id = e.network_id
+        JOIN segment s ON s.id = e.segment_id
+        WHERE e.network_id = %(network_id)s
         GROUP BY v.component ORDER BY length_m DESC
-    """).fetchall()
+    """, {"network_id": network_id}).fetchall()
     if rows:
         report.main_m = rows[0][1]
         report.islands = [Island(c, m, segs) for c, m, segs in rows[1:]]
     return report
 
 
-def main_component(conn: psycopg.Connection) -> int | None:
+def main_component(conn: psycopg.Connection, network: str = "ptc") -> int | None:
+    network_id = _network_id(conn, network)
     row = conn.execute("""
-        SELECT v.component FROM route_edge e JOIN route_vertex v ON v.id = e.source
+        SELECT v.component FROM route_edge e
+        JOIN route_vertex v ON v.id = e.source AND v.network_id = e.network_id
+        WHERE e.network_id = %(network_id)s
         GROUP BY v.component ORDER BY sum(e.length_m) DESC LIMIT 1
-    """).fetchone()
+    """, {"network_id": network_id}).fetchone()
     return row[0] if row else None

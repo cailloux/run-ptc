@@ -231,7 +231,8 @@ def import_layer(conn: psycopg.Connection, layer: Layer, features: list[dict],
 
     with conn.transaction():
         first_import = not conn.execute(
-            "SELECT EXISTS (SELECT 1 FROM segment WHERE layer = %s)", (layer.name,)).fetchone()[0]
+            "SELECT EXISTS (SELECT 1 FROM segment WHERE layer = %(layer)s AND network_id = %(network_id)s)",
+            {"layer": layer.name, "network_id": network_id}).fetchone()[0]
         conn.execute("DROP TABLE IF EXISTS pg_temp.staging")
         conn.execute("""
             CREATE TEMP TABLE staging (
@@ -309,19 +310,20 @@ def import_layer(conn: psycopg.Connection, layer: Layer, features: list[dict],
         changed = conn.execute("""
             SELECT s.id, t.source_oid, t.name, t.seg_type, t.length_m FROM segment s
             JOIN staging t ON t.source_key = s.source_key
-            WHERE s.layer = %s AND (s.geom_hash <> t.geom_hash OR s.counted <> t.counted)
+            WHERE s.layer = %(layer)s AND s.network_id = %(network_id)s
+              AND (s.geom_hash <> t.geom_hash OR s.counted <> t.counted)
             ORDER BY t.source_oid
-        """, (layer.name,)).fetchall()
+        """, {"layer": layer.name, "network_id": network_id}).fetchall()
         changed_ids = [r[0] for r in changed]
         report.changed_segments = [r[1:] for r in changed]
         report.changed = len(changed_ids)
 
         removed = conn.execute("""
             DELETE FROM segment s
-            WHERE s.layer = %s
+            WHERE s.layer = %(layer)s AND s.network_id = %(network_id)s
               AND NOT EXISTS (SELECT 1 FROM staging t WHERE t.source_key = s.source_key)
             RETURNING s.source_oid, s.name, s.seg_type, s.length_m
-        """, (layer.name,)).fetchall()
+        """, {"layer": layer.name, "network_id": network_id}).fetchall()
         report.removed_segments = sorted(removed)
         report.removed = len(removed)
 
@@ -364,15 +366,17 @@ def import_layer(conn: psycopg.Connection, layer: Layer, features: list[dict],
         report.tiny_parts = conn.execute("""
             SELECT s.source_oid, d.path[1] - 1, ST_Length(d.geom)
             FROM segment s CROSS JOIN LATERAL ST_Dump(s.geom) d
-            WHERE s.layer = %s AND s.counted AND ST_Length(d.geom) < %s
+            WHERE s.layer = %(layer)s AND s.network_id = %(network_id)s
+              AND s.counted AND ST_Length(d.geom) < %(min_part)s
             ORDER BY 1, 2
-        """, (layer.name, settings.min_part_length_m)).fetchall()
+        """, {"layer": layer.name, "network_id": network_id,
+              "min_part": settings.min_part_length_m}).fetchall()
         report.nodeless = [r[0] for r in conn.execute("""
             SELECT source_oid FROM segment s
-            WHERE layer = %s AND counted
+            WHERE layer = %(layer)s AND network_id = %(network_id)s AND counted
               AND NOT EXISTS (SELECT 1 FROM node n WHERE n.segment_id = s.id)
             ORDER BY 1
-        """, (layer.name,))]
+        """, {"layer": layer.name, "network_id": network_id})]
         (report.stored, report.counted, report.counted_m, report.excluded,
          report.nodes) = conn.execute("""
             SELECT count(*),
@@ -380,9 +384,9 @@ def import_layer(conn: psycopg.Connection, layer: Layer, features: list[dict],
                    coalesce(sum(length_m) FILTER (WHERE counted AND NOT excluded), 0),
                    count(*) FILTER (WHERE excluded),
                    (SELECT count(*) FROM node n JOIN segment s2 ON s2.id = n.segment_id
-                    WHERE s2.layer = %(layer)s)
-            FROM segment WHERE layer = %(layer)s
-        """, {"layer": layer.name}).fetchone()
+                    WHERE s2.layer = %(layer)s AND s2.network_id = %(network_id)s)
+            FROM segment WHERE layer = %(layer)s AND network_id = %(network_id)s
+        """, {"layer": layer.name, "network_id": network_id}).fetchone()
 
     _log_warnings(report)
     return report

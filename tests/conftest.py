@@ -21,4 +21,7 @@ def conn(db_url):
     with db.connect(db_url) as c:
         c.execute("TRUNCATE segment, node, source_duplicate, activity, activity_piece, job_run,"
                   " route_edge, route_vertex, source_signature, alert_episode RESTART IDENTITY CASCADE")
+        # network keeps the seeded ptc row stable (not in the TRUNCATE list
+        # above), but a test-added second network must not leak into the next.
+        c.execute("DELETE FROM network WHERE slug <> 'ptc'")
         yield c
