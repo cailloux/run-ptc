@@ -153,13 +153,40 @@ def match(conn: psycopg.Connection, settings: Settings, *,
     return _hit_count(conn) - before
 
 
-def recompute(conn: psycopg.Connection, settings: Settings) -> int:
-    """Re-split tracks, reassign radii, clear every hit, and replay every run."""
-    with conn.transaction():
-        conn.execute(
-            "UPDATE activity SET geom = split_track(track_raw, %s) WHERE status = 'city'",
-            (settings.track_gap_split_m,),
+def reclassify_unmatched(conn: psycopg.Connection) -> int:
+    """Match stored-but-unmatched activities (network_id IS NULL) against every
+    known network, using their already-stored track_raw -- no Intervals call
+    needed. Picks up runs synced before a network existed to match them."""
+    return conn.execute("""
+        WITH matched AS (
+            SELECT a.id AS activity_id, b.network_id
+            FROM activity a
+            JOIN LATERAL (
+                -- A real GPS fix landing in a network's box counts; the
+                -- straight line connecting two fixes across a GPS gap does
+                -- not, same rule as sync's own classification.
+                SELECT nb.network_id FROM network_box nb
+                WHERE EXISTS (
+                    SELECT 1 FROM ST_DumpPoints(a.track_raw) d WHERE ST_Intersects(d.geom, nb.box_4326)
+                )
+                ORDER BY nb.network_id LIMIT 1
+            ) b ON true
+            WHERE a.network_id IS NULL AND a.track_raw IS NOT NULL
         )
+        UPDATE activity a SET network_id = m.network_id, status = 'city'
+        FROM matched m WHERE a.id = m.activity_id
+    """).rowcount
+
+
+def recompute(conn: psycopg.Connection, settings: Settings) -> int:
+    """Reclassify unmatched runs, re-split tracks, reassign radii, clear every
+    hit, and replay every run."""
+    with conn.transaction():
+        reclassify_unmatched(conn)
+        conn.execute("""
+            UPDATE activity a SET geom = split_track(ST_Transform(a.track_raw, n.srid), %s)
+            FROM network n WHERE a.status = 'city' AND a.network_id = n.id
+        """, (settings.track_gap_split_m,))
         rebuild_pieces(conn)
         assign_radii(conn, settings)
         conn.execute("UPDATE node SET hit_activity_id = NULL, hit_at = NULL WHERE hit_at IS NOT NULL")

@@ -83,13 +83,21 @@ def road(oid: int, *parts, name: str = "TEST RD", city: str = "PEACHTREE CITY", 
 
 
 def run_import(conn, layer: str, features: list[dict], exclusions: Exclusions = Exclusions(),
-               settings: Settings = SETTINGS):
-    return import_layer(conn, LAYERS[layer], features, settings, exclusions)
+               settings: Settings = SETTINGS, network: str = "ptc"):
+    return import_layer(conn, LAYERS[layer], features, settings, exclusions, network=network)
 
 
 def network_id(conn, slug: str = "ptc") -> int:
     """The seeded network row's id, for raw-SQL fixtures that bypass app code."""
     return conn.execute("SELECT id FROM network WHERE slug = %s", (slug,)).fetchone()[0]
+
+
+def add_network(conn, slug: str, kind: str = "osm_city", srid: int = 32616) -> int:
+    """A second network row, for fixtures proving cross-network isolation."""
+    return conn.execute(
+        "INSERT INTO network (slug, name, kind, srid, sports) VALUES (%s, %s, %s, %s, '{run}') RETURNING id",
+        (slug, slug, kind, srid),
+    ).fetchone()[0]
 
 
 def nodes_of(conn, oid: int, layer: str = "cartpath") -> list[tuple]:

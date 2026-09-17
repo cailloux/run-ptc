@@ -1,4 +1,4 @@
-"""Sync runs from Intervals.icu (read-only) and store Peachtree City tracks.
+"""Sync runs from Intervals.icu (read-only) and classify each track by network.
 
 Rules are in docs/PLAN.md under "Activity sync". Gap splitting and the city
 test run in PostGIS; Python only filters the activity list and moves rows.
@@ -92,29 +92,39 @@ class SyncReport:
 
 
 UPSERT_SQL = """
-WITH raw AS (
-    SELECT CASE WHEN count(*) >= 2 THEN
-               ST_Transform(ST_SetSRID(ST_MakeLine(ST_MakePoint(lon, lat) ORDER BY seq), 4326), 32616)
-           END AS track
-    FROM sync_fix
-), split AS (
-    SELECT track, split_track(track, %(gap_m)s) AS parts FROM raw
+WITH points_4326 AS (
+    SELECT seq, ST_SetSRID(ST_MakePoint(lon, lat), 4326) AS pt FROM sync_fix
+), raw AS (
+    SELECT CASE WHEN count(*) >= 2 THEN ST_MakeLine(pt ORDER BY seq) END AS track_4326
+    FROM points_4326
+), matched AS (
+    -- A real GPS fix landing in a network's box counts; the straight line
+    -- connecting two fixes across a GPS gap does not (it may cross a box
+    -- neither fix is actually in).
+    SELECT r.track_4326, b.network_id,
+           CASE WHEN b.network_id IS NOT NULL THEN
+               split_track(ST_Transform(r.track_4326, b.srid), %(gap_m)s)
+           END AS parts
+    FROM raw r
+    LEFT JOIN LATERAL (
+        SELECT nb.network_id, nb.srid FROM network_box nb
+        WHERE r.track_4326 IS NOT NULL
+          AND EXISTS (SELECT 1 FROM points_4326 p WHERE ST_Intersects(p.pt, nb.box_4326))
+        ORDER BY nb.network_id LIMIT 1
+    ) b ON true
 ), classified AS (
     SELECT CASE
-               WHEN parts IS NULL THEN 'no_gps'
-               WHEN ST_Intersects(parts, (SELECT box FROM sync_city_box)) THEN 'city'
-               ELSE 'outside'
+               WHEN track_4326 IS NULL THEN 'no_gps'
+               WHEN network_id IS NULL THEN 'outside'
+               ELSE 'city'
            END AS status,
-           track, parts
-    FROM split
+           track_4326, network_id, parts
+    FROM matched
 )
 INSERT INTO activity (intervals_id, start_at, sport, name, distance_m, source,
-                      status, track_raw, geom, synced_at)
+                      status, track_raw, geom, network_id, synced_at)
 SELECT %(intervals_id)s, %(start_at)s, %(sport)s, %(name)s, %(distance_m)s, %(source)s,
-       status,
-       CASE WHEN status = 'city' THEN track END,
-       CASE WHEN status = 'city' THEN parts END,
-       now()
+       status, track_4326, parts, network_id, now()
 FROM classified
 ON CONFLICT (intervals_id) DO UPDATE SET
     start_at = EXCLUDED.start_at,
@@ -125,22 +135,19 @@ ON CONFLICT (intervals_id) DO UPDATE SET
     status = EXCLUDED.status,
     track_raw = EXCLUDED.track_raw,
     geom = EXCLUDED.geom,
+    network_id = EXCLUDED.network_id,
     synced_at = EXCLUDED.synced_at
 RETURNING id, status
 """
 
 
 def _prepare(conn: psycopg.Connection) -> None:
-    # Session temp tables, created outside any transaction so a dry run's
-    # rollback doesn't take them with it.
-    conn.execute("DROP TABLE IF EXISTS pg_temp.sync_fix, pg_temp.sync_city_box")
+    # A session temp table, created outside any transaction so a dry run's
+    # rollback doesn't take it with it.
+    conn.execute("DROP TABLE IF EXISTS pg_temp.sync_fix")
     conn.execute("CREATE TEMP TABLE sync_fix (seq integer, lat float8, lon float8)")
-    conn.execute("""
-        CREATE TEMP TABLE sync_city_box AS
-        SELECT ST_SetSRID(ST_Extent(geom)::geometry, 32616) AS box FROM segment
-    """)
-    if conn.execute("SELECT box FROM sync_city_box").fetchone()[0] is None:
-        raise RuntimeError("no city segments; run the city import before syncing")
+    if conn.execute("SELECT count(*) FROM network_box").fetchone()[0] == 0:
+        raise RuntimeError("no segments for any network; run the city import before syncing")
 
 
 def _store_run(conn: psycopg.Connection, activity: dict, points: list, gap_m: float) -> tuple[int, str]:
