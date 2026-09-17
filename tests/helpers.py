@@ -87,6 +87,11 @@ def run_import(conn, layer: str, features: list[dict], exclusions: Exclusions = 
     return import_layer(conn, LAYERS[layer], features, settings, exclusions)
 
 
+def network_id(conn, slug: str = "ptc") -> int:
+    """The seeded network row's id, for raw-SQL fixtures that bypass app code."""
+    return conn.execute("SELECT id FROM network WHERE slug = %s", (slug,)).fetchone()[0]
+
+
 def nodes_of(conn, oid: int, layer: str = "cartpath") -> list[tuple]:
     """(part_idx, seq, x, y) for one segment, as offsets from the origin."""
     return [
