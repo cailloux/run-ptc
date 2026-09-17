@@ -7,8 +7,8 @@ from app import cli
 from app.arcgis import LayerSignature, layer_signature
 from app.exclusions import Exclusions
 from app.jobs import JOB_LOCK
-from app.refresh import LIST_CAP, refresh, stored_signature
-from tests.helpers import SETTINGS, cartpath, line, road
+from app.refresh import LIST_CAP, refresh, store_signature, stored_signature
+from tests.helpers import SETTINGS, add_network, cartpath, line, road
 
 EDITED = datetime(2026, 4, 21, 12, 21, 35, tzinfo=UTC)
 
@@ -83,6 +83,18 @@ def test_first_refresh_imports_everything_and_records_signatures(conn, city):
     assert report.headline() == "cart paths: 2 added, 0 changed, 0 removed; roads: 1 added, 0 changed, 0 removed"
     assert stored_signature(conn, "road") == city.sigs["road"]
     assert conn.execute("SELECT count(*) FROM route_edge").fetchone()[0] == 3   # graph rebuilt
+
+
+def test_two_networks_signatures_for_the_same_layer_name_do_not_collide(conn):
+    add_network(conn, "testworld")
+    ptc_sig = LayerSignature(feature_count=10, max_oid=99, max_edited_at=None)
+    tw_sig = LayerSignature(feature_count=5, max_oid=42, max_edited_at=None)
+
+    store_signature(conn, "cartpath", ptc_sig)
+    store_signature(conn, "cartpath", tw_sig, network="testworld")
+
+    assert stored_signature(conn, "cartpath") == ptc_sig
+    assert stored_signature(conn, "cartpath", network="testworld") == tw_sig
 
 
 def test_unchanged_city_imports_nothing(conn, city):

@@ -333,7 +333,7 @@ def import_layer(conn: psycopg.Connection, layer: Layer, features: list[dict],
             SELECT %(network_id)s, %(layer)s, source_key, source_oid, name, seg_type, counted,
                    uncounted_reason, length_m, edited_at, geom_hash, props, geom
             FROM staging
-            ON CONFLICT (layer, source_key) DO UPDATE SET
+            ON CONFLICT (network_id, layer, source_key) DO UPDATE SET
                 source_oid = EXCLUDED.source_oid,
                 name = EXCLUDED.name,
                 seg_type = EXCLUDED.seg_type,
