@@ -219,10 +219,15 @@ def regenerate_nodes(conn: psycopg.Connection, segment_ids: list[int], settings:
 
 
 def import_layer(conn: psycopg.Connection, layer: Layer, features: list[dict],
-                 settings: Settings, exclusions: excl.Exclusions) -> ImportReport:
+                 settings: Settings, exclusions: excl.Exclusions, network: str = "ptc") -> ImportReport:
     report = ImportReport(layer.name, raw=len(features))
     if not features:
         raise RuntimeError(f"{layer.name}: city returned no features; refusing to import")
+
+    network_row = conn.execute("SELECT id FROM network WHERE slug = %s", (network,)).fetchone()
+    if network_row is None:
+        raise RuntimeError(f"no network with slug {network!r}")
+    network_id = network_row[0]
 
     with conn.transaction():
         first_import = not conn.execute(
@@ -321,9 +326,9 @@ def import_layer(conn: psycopg.Connection, layer: Layer, features: list[dict],
         report.removed = len(removed)
 
         upserted = conn.execute("""
-            INSERT INTO segment (layer, source_key, source_oid, name, seg_type, counted,
+            INSERT INTO segment (network_id, layer, source_key, source_oid, name, seg_type, counted,
                                  uncounted_reason, length_m, source_edited_at, geom_hash, props, geom)
-            SELECT %s, source_key, source_oid, name, seg_type, counted,
+            SELECT %(network_id)s, %(layer)s, source_key, source_oid, name, seg_type, counted,
                    uncounted_reason, length_m, edited_at, geom_hash, props, geom
             FROM staging
             ON CONFLICT (layer, source_key) DO UPDATE SET
@@ -338,7 +343,7 @@ def import_layer(conn: psycopg.Connection, layer: Layer, features: list[dict],
                 props = EXCLUDED.props,
                 geom = EXCLUDED.geom
             RETURNING id, (xmax = 0) AS inserted, source_oid, name, seg_type, length_m
-        """, (layer.name,)).fetchall()
+        """, {"network_id": network_id, "layer": layer.name}).fetchall()
         added_ids = [r[0] for r in upserted if r[1]]
         report.added_segments = sorted(r[2:] for r in upserted if r[1])
         report.added = len(added_ids)

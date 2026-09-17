@@ -2,7 +2,9 @@ import math
 
 import pytest
 
-from tests.helpers import cartpath, global_id, line, nodes_of, road, run_import, segment
+from app.exclusions import Exclusions
+from app.importer import LAYERS, import_layer
+from tests.helpers import SETTINGS, cartpath, global_id, line, network_id, nodes_of, road, run_import, segment
 
 
 def reversed_line(coords):
@@ -14,6 +16,18 @@ def test_linestring_is_stored_as_utm_multilinestring(conn):
     s = segment(conn, 1)
     assert (s["type"], s["srid"], s["parts"]) == ("MULTILINESTRING", 32616, 1)
     assert s["source_key"] == global_id(1)
+
+
+def test_imported_segment_gets_the_network_id(conn):
+    run_import(conn, "cartpath", [cartpath(1, line((0, 0), (30, 40)))])
+    stored = conn.execute("SELECT network_id FROM segment WHERE source_oid = 1").fetchone()[0]
+    assert stored == network_id(conn)
+
+
+def test_unknown_network_slug_is_refused(conn):
+    with pytest.raises(RuntimeError, match="nope"):
+        import_layer(conn, LAYERS["cartpath"], [cartpath(1, line((0, 0), (30, 40)))],
+                     SETTINGS, Exclusions(), network="nope")
 
 
 def test_cartpath_name_skips_na_placeholders(conn):
