@@ -7,7 +7,7 @@ import pytest
 from app import exclusions as excl
 from app.matching import match, metrics, near_misses, rebuild_pieces, recompute
 from app.sync import sync
-from tests.helpers import SETTINGS, X0, Y0, cartpath, global_id, line, road, run_import
+from tests.helpers import SETTINGS, X0, Y0, cartpath, global_id, line, network_id, road, run_import
 from tests.test_sync import FakeIntervals, city, run, walk
 
 
@@ -25,12 +25,12 @@ def add_run(conn, intervals_id, *waypoints, start="2024-05-04T12:00:00+00:00", r
     points = list(waypoints) if raw else densify(waypoints)
     wkt = "LINESTRING(" + ", ".join(f"{X0 + x} {Y0 + y}" for x, y in points) + ")"
     activity_id = conn.execute("""
-        INSERT INTO activity (intervals_id, start_at, sport, status, track_raw, geom)
+        INSERT INTO activity (intervals_id, start_at, sport, status, track_raw, geom, network_id)
         VALUES (%(id)s, %(start)s, 'Run', 'city', ST_GeomFromText(%(wkt)s, 32616),
-                split_track(ST_GeomFromText(%(wkt)s, 32616), %(gap)s))
+                split_track(ST_GeomFromText(%(wkt)s, 32616), %(gap)s), %(network_id)s)
         RETURNING id
     """, {"id": intervals_id, "start": datetime.fromisoformat(start), "wkt": wkt,
-          "gap": SETTINGS.track_gap_split_m}).fetchone()[0]
+          "gap": SETTINGS.track_gap_split_m, "network_id": network_id(conn)}).fetchone()[0]
     rebuild_pieces(conn, [activity_id])
     return activity_id
 
