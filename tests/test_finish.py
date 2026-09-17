@@ -6,7 +6,7 @@ from app.exclusions import CartpathExclusion, Exclusions
 from app.finish import finish_route, new_miles, units
 from app.graph import build_graph
 from app.routing import RouteError
-from tests.helpers import SETTINGS, cartpath, global_id, line, run_import
+from tests.helpers import SETTINGS, add_network, cartpath, global_id, line, run_import
 from tests.test_api_route import point
 from tests.test_api_sync import api  # noqa: F401  (fixture)
 from tests.test_routing import build, latlon, route, utm
@@ -112,6 +112,24 @@ def test_finishes_a_path_and_comes_back(conn):
     assert f.skipped == 0
     # And the whole of path 2 is new ground on the built route.
     assert new_miles(conn, leg_points(conn, f)).new_m == pytest.approx(80, abs=5)
+
+
+def test_two_networks_finish_without_cross_contamination(conn):
+    """units()/finish_route() join route_edge/route_vertex directly; identical
+    geometry between two networks (step 7's composite PK means edge/vertex
+    ids repeat across networks) is the real stress case."""
+    build(conn, [cartpath(1, line((0, 0), (100, 0))), cartpath(2, line((50, 0), (50, 80)))])
+
+    add_network(conn, "testworld")
+    run_import(conn, "cartpath", [
+        cartpath(101, line((0, 0), (100, 0))), cartpath(102, line((50, 0), (50, 80))),
+    ], network="testworld")
+    build_graph(conn, SETTINGS, network="testworld")
+
+    tw_seg_id = seg_id(conn, 102)
+    f = finish_route(conn, latlon(conn, 10, 0), [tw_seg_id], MAX_M, "testworld")
+    assert f.length_m == pytest.approx(240, abs=0.5)
+    assert f.skipped == 0
 
 
 def test_only_edges_with_unrun_stretches_are_required(conn):

@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 import psycopg
 
-from app.routing import EDGES_SQL, RouteError, leg, snap
+from app.routing import RouteError, edges_sql, leg, network_row, snap
 
 SAMPLE_M = 5     # new miles: the route is sampled this often
 ON_EDGE_M = 1    # a sample this close to an edge is on it
@@ -43,7 +43,7 @@ class NewMiles:
     lines: list[list[LatLng]]   # the new stretches, for drawing
 
 
-def new_miles(conn: psycopg.Connection, latlngs: list[LatLng]) -> NewMiles:
+def new_miles(conn: psycopg.Connection, latlngs: list[LatLng], network: str = "ptc") -> NewMiles:
     """How much of a route runs over not-run intervals, each stretch counted once.
 
     The route is sampled every SAMPLE_M. A sample on an edge is new when the
@@ -52,9 +52,10 @@ def new_miles(conn: psycopg.Connection, latlngs: list[LatLng]) -> NewMiles:
     """
     if len(latlngs) < 2:
         return NewMiles(0.0, [])
+    network_id, srid = network_row(conn, network)
     rows = conn.execute(f"""
         WITH line AS (
-            SELECT ST_Transform(ST_SetSRID(ST_MakeLine(ST_MakePoint(lon, lat) ORDER BY i), 4326), 32616) AS geom
+            SELECT ST_Transform(ST_SetSRID(ST_MakeLine(ST_MakePoint(lon, lat) ORDER BY i), 4326), {srid}) AS geom
             FROM unnest(%(lats)s::float8[], %(lons)s::float8[]) WITH ORDINALITY AS p(lat, lon, i)
         ), k AS (
             SELECT GREATEST(1, CEIL(ST_Length(geom) / %(sample_m)s))::int AS n, ST_Length(geom) AS len FROM line
@@ -72,7 +73,8 @@ def new_miles(conn: psycopg.Connection, latlngs: list[LatLng]) -> NewMiles:
             FROM sample s CROSS JOIN LATERAL (
                 SELECT segment_id, part_idx, part_from + (part_to - part_from) * ST_LineLocatePoint(geom, s.pt) AS f
                 FROM route_edge
-                WHERE ST_DWithin(geom, s.pt, %(on_edge_m)s) ORDER BY geom <-> s.pt LIMIT 1
+                WHERE network_id = %(network_id)s AND ST_DWithin(geom, s.pt, %(on_edge_m)s)
+                ORDER BY geom <-> s.pt LIMIT 1
             ) e
             JOIN segment sg ON sg.id = e.segment_id
         ), iv AS MATERIALIZED ({NOT_RUN_SQL.format(segments="(SELECT segment_id FROM on_edge)")})
@@ -87,7 +89,7 @@ def new_miles(conn: psycopg.Connection, latlngs: list[LatLng]) -> NewMiles:
         ORDER BY s.i, iv.k NULLS LAST
     """, {
         "lats": [p[0] for p in latlngs], "lons": [p[1] for p in latlngs],
-        "sample_m": SAMPLE_M, "on_edge_m": ON_EDGE_M,
+        "sample_m": SAMPLE_M, "on_edge_m": ON_EDGE_M, "network_id": network_id,
     }).fetchall()
 
     step = rows[0][0]
@@ -138,22 +140,24 @@ class Finish:
     skipped: int       # units on islands the start can't reach
 
 
-def units(conn: psycopg.Connection, segment_ids: list[int]) -> list[Unit]:
+def units(conn: psycopg.Connection, segment_ids: list[int], network: str = "ptc") -> list[Unit]:
     """Edges of these segments that overlap a not-run interval, chained along each part.
 
     ponytail: a required edge is run end to end, even when only its far
     stretch is unrun; an out-and-back into part of an edge could be shorter.
     """
+    network_id, _ = network_row(conn, network)
     rows = conn.execute(f"""
         WITH iv AS ({NOT_RUN_SQL.format(segments="(SELECT unnest(%(segments)s::bigint[]))")})
         SELECT DISTINCT e.id, e.segment_id, e.part_idx, e.part_from, e.source, e.target,
                v.component
         FROM route_edge e
-        JOIN route_vertex v ON v.id = e.source
+        JOIN route_vertex v ON v.id = e.source AND v.network_id = e.network_id
         JOIN iv ON iv.segment_id = e.segment_id AND iv.part_idx = e.part_idx
                AND least(e.part_to, iv.b) - greatest(e.part_from, iv.a) > 1e-9
+        WHERE e.network_id = %(network_id)s
         ORDER BY e.segment_id, e.part_idx, e.part_from
-    """, {"segments": segment_ids}).fetchall()
+    """, {"segments": segment_ids, "network_id": network_id}).fetchall()
     chains: list[Unit] = []
     prev_part = None
     for edge_id, segment_id, part_idx, _, source, target, component in rows:
@@ -257,18 +261,20 @@ def _or_opt(order: list[tuple[Unit, bool]], home: int, dist) -> bool:
     return changed
 
 
-def _vertex_latlng(conn: psycopg.Connection, vid: int) -> LatLng:
+def _vertex_latlng(conn: psycopg.Connection, vid: int, network_id: int) -> LatLng:
     return conn.execute(
-        "SELECT ST_Y(p), ST_X(p) FROM (SELECT ST_Transform(geom, 4326) p FROM route_vertex WHERE id = %s) v",
-        (vid,),
+        "SELECT ST_Y(p), ST_X(p) FROM (SELECT ST_Transform(geom, 4326) p FROM route_vertex"
+        " WHERE id = %s AND network_id = %s) v",
+        (vid, network_id),
     ).fetchone()
 
 
 def finish_route(conn: psycopg.Connection, start: LatLng, segment_ids: list[int],
-                 max_m: float) -> Finish:
+                 max_m: float, network: str = "ptc") -> Finish:
     """A loop from start that runs every not-run stretch of these segments."""
-    a = snap(conn, *start, max_m)
-    found = units(conn, segment_ids)
+    network_id, _ = network_row(conn, network)
+    a = snap(conn, *start, max_m, network)
+    found = units(conn, segment_ids, network)
     todo = [u for u in found if u.component == a.component]
     if not todo:
         raise RouteError("those segments can't be reached from the start (they're on an island)"
@@ -276,12 +282,13 @@ def finish_route(conn: psycopg.Connection, start: LatLng, segment_ids: list[int]
 
     # For ordering, the start counts as the nearer end of its edge.
     source, target = conn.execute(
-        "SELECT source, target FROM route_edge WHERE id = %s", (a.edge_id,)).fetchone()
+        "SELECT source, target FROM route_edge WHERE id = %s AND network_id = %s",
+        (a.edge_id, network_id)).fetchone()
     home = source if a.fraction < 0.5 else target
     vids = sorted({home, *(u.source for u in todo), *(u.target for u in todo)})
     cost = {(s, t): c for s, t, c in conn.execute(
         "SELECT start_vid, end_vid, agg_cost FROM pgr_dijkstraCostMatrix(%s, %s::bigint[], directed => true)",
-        (EDGES_SQL, vids))}
+        (edges_sql(network_id), vids))}
 
     def dist(s: int, t: int) -> float:
         return 0.0 if s == t else cost.get((s, t), math.inf)
@@ -313,7 +320,7 @@ def finish_route(conn: psycopg.Connection, start: LatLng, segment_ids: list[int]
         for s, t, node, edge in conn.execute(
             "SELECT start_vid, end_vid, node, edge FROM pgr_dijkstra(%s, %s, directed => true)"
             " ORDER BY seq",
-            (EDGES_SQL, f"SELECT * FROM (VALUES {combos}) AS c(source, target)"),
+            (edges_sql(network_id), f"SELECT * FROM (VALUES {combos}) AS c(source, target)"),
         ):
             if edge != -1:
                 paths.setdefault((s, t), []).append((edge, node))
@@ -332,12 +339,13 @@ def finish_route(conn: psycopg.Connection, start: LatLng, segment_ids: list[int]
                sum(e.length_m)
         FROM unnest(%(legs)s::int[], %(edges)s::bigint[], %(walk_from)s::bigint[])
              WITH ORDINALITY AS s(leg, edge, walk_from, ord)
-        JOIN route_edge e ON e.id = s.edge
+        JOIN route_edge e ON e.id = s.edge AND e.network_id = %(network_id)s
         GROUP BY s.leg ORDER BY s.leg
     """, {
         "legs": [i for i, _, _ in flat],
         "edges": [e for _, e, _ in flat],
         "walk_from": [v for _, _, v in flat],
+        "network_id": network_id,
     }).fetchall()
 
     legs = []
@@ -346,10 +354,10 @@ def finish_route(conn: psycopg.Connection, start: LatLng, segment_ids: list[int]
         legs.append({"latlngs": [(lat, lon) for lon, lat in coords], "length_m": length_m})
 
     # The first and last legs run from and back to the exact click.
-    first = leg(conn, start, _vertex_latlng(conn, enter(0)), max_m)
+    first = leg(conn, start, _vertex_latlng(conn, enter(0), network_id), max_m, network)
     legs[0] = {"latlngs": first.latlngs + legs[0]["latlngs"][1:],
                "length_m": first.length_m + legs[0]["length_m"]}
-    back = leg(conn, _vertex_latlng(conn, leave(len(order) - 1)), start, max_m)
+    back = leg(conn, _vertex_latlng(conn, leave(len(order) - 1), network_id), start, max_m, network)
     if back.length_m > 0:
         legs.append({"latlngs": back.latlngs, "length_m": back.length_m})
     for lg in legs:
