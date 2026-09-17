@@ -205,6 +205,19 @@ def sync(conn: psycopg.Connection, client: IntervalsClient, start: date, end: da
                     city_ids.append(activity_id)
                 known.add(a["id"])
             # Match only this month's new city runs; recompute replays everything.
+            #
+            # ponytail: match() here defaults to network="ptc", but city_ids
+            # can span multiple networks (each activity is classified
+            # independently against every network in _store_run). Currently
+            # dormant: match()'s own node<->activity_piece join is already
+            # network-correlated regardless of this param, and every node's
+            # radius_m is set correctly at import time (app/importer.py's
+            # regenerate_nodes), so nothing is ever missing for this call's
+            # assign_radii(missing_only=True) step to backfill. It reactivates
+            # the moment a second network has its own settings.yaml block and
+            # real segments (Phase B/C) -- fix then by grouping city_ids by
+            # their network and calling match() once per group with that
+            # network's own settings, not just its slug.
             report.newly_hit += match(conn, settings, activity_ids=city_ids)
         if report.fetched > fetched_before:
             log.info("%s: fetched %d runs", oldest.strftime("%Y-%m"), report.fetched - fetched_before)
