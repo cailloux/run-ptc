@@ -58,17 +58,19 @@ class Snapshot:
     islands: int
 
 
-def snapshot(conn: psycopg.Connection) -> Snapshot:
+def snapshot(conn: psycopg.Connection, network: str = "ptc") -> Snapshot:
+    network_id = _network_id(conn, network)
     counted = {layer: (0, 0.0) for layer in LAYERS}
     for layer, n, m in conn.execute("""
         SELECT layer, count(*), coalesce(sum(length_m), 0) / %s FROM segment
-        WHERE counted AND NOT excluded GROUP BY layer
-    """, (METERS_PER_MILE,)):
+        WHERE counted AND NOT excluded AND network_id = %s GROUP BY layer
+    """, (METERS_PER_MILE, network_id)):
         counted[layer] = (n, m)
     second = conn.execute(
-        "SELECT count(*) FROM segment WHERE uncounted_reason = 'second carriageway'").fetchone()[0]
-    graph = graph_report(conn)
-    return Snapshot(metrics(conn).as_dict(), counted, second, graph.components, len(graph.islands))
+        "SELECT count(*) FROM segment WHERE uncounted_reason = 'second carriageway' AND network_id = %s",
+        (network_id,)).fetchone()[0]
+    graph = graph_report(conn, network)
+    return Snapshot(metrics(conn, network).as_dict(), counted, second, graph.components, len(graph.islands))
 
 
 def _segment_line(seg: tuple) -> str:
@@ -157,26 +159,26 @@ def download(client: httpx2.Client, layer: Layer, sig: LayerSignature, fetch=fet
 
 
 def refresh(conn: psycopg.Connection, client: httpx2.Client, settings: Settings,
-            exclusions: excl.Exclusions, *, force: bool = False,
+            exclusions: excl.Exclusions, *, force: bool = False, network: str = "ptc",
             signature=layer_signature, fetch=fetch_features) -> RefreshReport:
     """Import each layer whose signature changed (or every layer if forced)."""
     report = RefreshReport()
     for name, layer in LAYERS.items():
         report.signatures[name] = signature(client, layer.url, layer.oid_field)
     changed = [name for name in LAYERS
-               if force or stored_signature(conn, name) != report.signatures[name]]
+               if force or stored_signature(conn, name, network) != report.signatures[name]]
     if not changed:
         return report
 
-    report.before = snapshot(conn)
+    report.before = snapshot(conn, network)
     for name in changed:
         layer = LAYERS[name]
         features = download(client, layer, report.signatures[name], fetch)
-        report.imports[name] = import_layer(conn, layer, features, settings, exclusions)
-    report.graph = build_graph(conn, settings)
-    report.after = snapshot(conn)
+        report.imports[name] = import_layer(conn, layer, features, settings, exclusions, network=network)
+    report.graph = build_graph(conn, settings, network)
+    report.after = snapshot(conn, network)
     # Only now, with everything done, record what was imported; a failure
     # anywhere above leaves the old signatures, so the next run retries.
     for name in changed:
-        store_signature(conn, name, report.signatures[name])
+        store_signature(conn, name, report.signatures[name], network)
     return report

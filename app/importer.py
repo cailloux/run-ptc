@@ -361,7 +361,7 @@ def import_layer(conn: psycopg.Connection, layer: Layer, features: list[dict],
             """, {"added": added_ids, "changed": changed_ids})
 
         regenerate_nodes(conn, added_ids + changed_ids, settings)
-        report.exclusion_warnings = excl.apply(conn, exclusions)
+        report.exclusion_warnings = excl.apply(conn, exclusions, network=network)
 
         report.tiny_parts = conn.execute("""
             SELECT s.source_oid, d.path[1] - 1, ST_Length(d.geom)

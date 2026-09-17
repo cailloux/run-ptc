@@ -7,8 +7,9 @@ from app import cli
 from app.arcgis import LayerSignature, layer_signature
 from app.exclusions import Exclusions
 from app.jobs import JOB_LOCK
-from app.refresh import LIST_CAP, refresh, store_signature, stored_signature
-from tests.helpers import SETTINGS, add_network, cartpath, line, road
+from app.importer import METERS_PER_MILE
+from app.refresh import LIST_CAP, refresh, snapshot, store_signature, stored_signature
+from tests.helpers import SETTINGS, add_network, cartpath, line, road, run_import
 
 EDITED = datetime(2026, 4, 21, 12, 21, 35, tzinfo=UTC)
 
@@ -193,11 +194,53 @@ def test_failed_jobs_end_with_one_clean_line(conn, db_url, monkeypatch, capsys):
 
 def test_import_is_a_forced_refresh_logged_as_import(conn, db_url, monkeypatch, city):
     monkeypatch.setenv("DATABASE_URL", db_url)
-    monkeypatch.setattr(cli, "refresh", lambda conn, client, settings, excl, force: city.run(conn, force=force))
+    monkeypatch.setattr(cli, "refresh",
+                        lambda conn, client, settings, excl, force, network: city.run(conn, force=force))
     assert cli.main(["import"]) == 0
     assert cli.main(["import"]) == 0   # unchanged city: still imports every layer
     assert sorted(city.fetched) == ["cartpath", "cartpath", "road", "road"]
     assert conn.execute("SELECT job, status FROM job_run").fetchall() == [("import", "ok")] * 2
+
+
+def test_snapshot_is_isolated_per_network(conn):
+    """snapshot()'s own segment-count and second-carriageway queries gained
+    a network_id filter as part of this step (the gap step 9's PR flagged as
+    deferred) -- no test exercised them with two networks present."""
+    run_import(conn, "cartpath", [cartpath(1, line((0, 0), (100, 0)))])
+    add_network(conn, "testworld")
+    run_import(conn, "cartpath", [
+        cartpath(101, line((0, 0), (100, 0))),
+        cartpath(102, line((0, 10), (100, 10))),
+    ], network="testworld")
+
+    ptc_snap, tw_snap = snapshot(conn, "ptc"), snapshot(conn, "testworld")
+    assert ptc_snap.counted["cartpath"] == (1, pytest.approx(100 / METERS_PER_MILE))
+    assert tw_snap.counted["cartpath"] == (2, pytest.approx(200 / METERS_PER_MILE))
+
+
+def test_network_flag_is_threaded_to_refresh(conn, db_url, monkeypatch, city):
+    """No prior test exercised --network at the argparse level at all --
+    every check of the wiring itself was manual."""
+    monkeypatch.setenv("DATABASE_URL", db_url)
+    monkeypatch.setattr(cli, "load_settings", lambda network: SETTINGS)
+    seen = {}
+
+    def fake_refresh(conn, client, settings, excl, force, network):
+        seen["network"] = network
+        return city.run(conn, force=force)
+
+    monkeypatch.setattr(cli, "refresh", fake_refresh)
+    assert cli.main(["--network", "testworld", "import"]) == 0
+    assert seen["network"] == "testworld"
+
+
+def test_unknown_network_raises_before_the_job_starts(conn, db_url, monkeypatch):
+    # load_settings() runs before _run_job's try/except in every subcommand
+    # (pre-existing: any settings-loading failure crashes uncaught, not just
+    # a bad --network) -- fails loud immediately, not as a clean job failure.
+    monkeypatch.setenv("DATABASE_URL", db_url)
+    with pytest.raises(ValueError, match="nope"):
+        cli.main(["--network", "nope", "graph"])
 
 
 def test_busy_jobs_exit_75(conn, db_url, monkeypatch):
