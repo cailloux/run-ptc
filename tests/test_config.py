@@ -12,13 +12,18 @@ def test_repo_settings_file_loads():
 def test_unknown_key_is_dropped_with_a_warning(tmp_path, caplog):
     base = (CONFIG_DIR / "settings.yaml").read_text()
     path = tmp_path / "settings.yaml"
-    path.write_text(base + "\nnot_a_real_setting: 1\n")
+    path.write_text(base + "\n    not_a_real_setting: 1\n")
 
     with caplog.at_level(logging.WARNING):
         settings = load_settings(path)
 
     assert isinstance(settings, Settings)
     assert "not_a_real_setting" in caplog.text
+
+
+def test_unknown_network_raises():
+    with pytest.raises(ValueError, match="doesnotexist"):
+        load_settings(network="doesnotexist")
 
 
 def test_missing_key_still_raises(tmp_path):

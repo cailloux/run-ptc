@@ -1,97 +1,99 @@
-# Tunables. Changes take effect on the next import (and, from Phase 3, recompute).
+networks:
+  ptc:
+    # Tunables. Changes take effect on the next import (and, from Phase 3, recompute).
 
-# Node spacing along each part of a counted segment. Actual spacing is this or
-# slightly less, so both endpoints land exactly on nodes.
-node_spacing_m: 20
+    # Node spacing along each part of a counted segment. Actual spacing is this or
+    # slightly less, so both endpoints land exactly on nodes.
+    node_spacing_m: 20
 
-# Whole features shorter than this are dropped on import.
-min_segment_length_m: 1
+    # Whole features shorter than this are dropped on import.
+    min_segment_length_m: 1
 
-# Parts of a multipart feature shorter than this stay in the geometry for
-# routing but get no nodes.
-min_part_length_m: 1
+    # Parts of a multipart feature shorter than this stay in the geometry for
+    # routing but get no nodes.
+    min_part_length_m: 1
 
-# Grid used to snap geometry before hashing, for dedupe and change detection.
-dedupe_grid_m: 0.01
+    # Grid used to snap geometry before hashing, for dedupe and change detection.
+    dedupe_grid_m: 0.01
 
-# Cart path Type values that count toward completion.
-cartpath_counted_types: [Path, Bridge, Tunnel]
+    # Cart path Type values that count toward completion.
+    cartpath_counted_types: [Path, Bridge, Tunnel]
 
-# Roads count only when their City attribute equals this.
-road_counted_city: PEACHTREE CITY
+    # Roads count only when their City attribute equals this.
+    road_counted_city: PEACHTREE CITY
 
-# Divided roads drawn as two carriageways. Only one carriageway counts (and
-# gets nodes, with the wide match radius so either sidewalk completes it);
-# the other is still routable and shows the same coverage on the map.
-divided_roads:
-  - N HIGHWAY 74
-  - S HIGHWAY 74
-  - W HIGHWAY 54
-  - N PEACHTREE PKWY
-  - S PEACHTREE PKWY
-  - MACDUFF PKWY
+    # Divided roads drawn as two carriageways. Only one carriageway counts (and
+    # gets nodes, with the wide match radius so either sidewalk completes it);
+    # the other is still routable and shows the same coverage on the map.
+    divided_roads:
+      - N HIGHWAY 74
+      - S HIGHWAY 74
+      - W HIGHWAY 54
+      - N PEACHTREE PKWY
+      - S PEACHTREE PKWY
+      - MACDUFF PKWY
 
-# Intervals.icu activity types synced as runs. VirtualRun (treadmill apps) is left out.
-sync_run_types: [Run, TrailRun]
+    # Intervals.icu activity types synced as runs. VirtualRun (treadmill apps) is left out.
+    sync_run_types: [Run, TrailRun]
 
-# First date the initial backfill asks Intervals for. The earliest run is from 2023.
-sync_backfill_start: 2023-01-01
+    # First date the initial backfill asks Intervals for. The earliest run is from 2023.
+    sync_backfill_start: 2023-01-01
 
-# Tracks are split wherever consecutive GPS fixes are more than this far apart.
-track_gap_split_m: 100
+    # Tracks are split wherever consecutive GPS fixes are more than this far apart.
+    track_gap_split_m: 100
 
-# A node is hit when a run passes within its radius. Changes take effect on the
-# next recompute.
-#
-# Cart paths: GPS tracks sit close to the paths (93% of hits at 20 m were within
-# 5 m), and a 20 m radius credited the second node up side paths you only ran
-# past. End nodes (the first and last node of each part) sit at junctions where
-# runners cut corners, so they have their own radius.
-match_radius_cartpath_m: 10
-match_radius_cartpath_end_m: 10
-# Roads in the wide classes get the wide radius because sidewalks sit farther
-# from the centerline; CLASS = Arterial is SR-74 and SR-54.
-match_radius_road_m: 20
-match_radius_wide_m: 30
-match_radius_wide_road_classes: [Arterial]
+    # A node is hit when a run passes within its radius. Changes take effect on the
+    # next recompute.
+    #
+    # Cart paths: GPS tracks sit close to the paths (93% of hits at 20 m were within
+    # 5 m), and a 20 m radius credited the second node up side paths you only ran
+    # past. End nodes (the first and last node of each part) sit at junctions where
+    # runners cut corners, so they have their own radius.
+    match_radius_cartpath_m: 10
+    match_radius_cartpath_end_m: 10
+    # Roads in the wide classes get the wide radius because sidewalks sit farther
+    # from the centerline; CLASS = Arterial is SR-74 and SR-54.
+    match_radius_road_m: 20
+    match_radius_wide_m: 30
+    match_radius_wide_road_classes: [Arterial]
 
-# Routing graph: line ends within this distance join, and an end this close
-# to another line's middle splits that line into a T-junction.
-graph_snap_m: 3
+    # Routing graph: line ends within this distance join, and an end this close
+    # to another line's middle splits that line into a T-junction.
+    graph_snap_m: 3
 
-# Route builder: a click farther than this from any path or road is refused.
-route_snap_max_m: 50
+    # Route builder: a click farther than this from any path or road is refused.
+    route_snap_max_m: 50
 
-# Routing cost multiplier for road stretches with a cart path running
-# alongside (within the road's match radius), so routes take the path.
-# Running the path still completes the road. Distances shown stay true.
-route_parallel_road_factor: 3
+    # Routing cost multiplier for road stretches with a cart path running
+    # alongside (within the road's match radius), so routes take the path.
+    # Running the path still completes the road. Distances shown stay true.
+    route_parallel_road_factor: 3
 
-# A data source (Intervals sync, city data) is stale when its last success is
-# older than this. Nightly runs are 24 h apart, so one skipped night stays
-# quiet and a second one alerts. (A failed run alerts right away.)
-stale_after_hours: 36
+    # A data source (Intervals sync, city data) is stale when its last success is
+    # older than this. Nightly runs are 24 h apart, so one skipped night stays
+    # quiet and a second one alerts. (A failed run alerts right away.)
+    stale_after_hours: 36
 
-# FIT course export: turn classification (docs/specs/fit-course-export.md).
-# Angle thresholds in degrees; below "straight" is a decision point passed
-# straight through, above "sharp" is a retrace turnaround.
-fit_turn_thresholds_deg: {straight: 20, slight: 45, turn: 135, sharp: 170}
-# Bearings are measured over this many meters before/after a junction, so
-# snap jitter and tiny zig-zags don't count as turns.
-fit_bearing_window_m: 15
-# Whether a junction the route passes straight through gets a "straight"
-# cue: ambiguous (only when another branch leaves close enough to be
-# mistaken for it), all, or none.
-fit_straight_cues: ambiguous
-# Decision points directly joined by an edge no longer than this are one
-# cue, not several: real intersections are sometimes digitized as multiple
-# graph vertices linked by a short connector (a crosswalk, a curb cut).
-# Topology, not route distance, so two separate intersections that happen
-# to sit close together on the route never merge into one.
-fit_cluster_m: 20
-# Nominal pace used to synthesize record timestamps (the watch's virtual
-# partner reads these); doesn't affect the route itself.
-fit_course_pace_min_per_mi: 9.0
-# How far a route point may be from a route_edge and still snap onto it when
-# re-deriving decision points for FIT export (app/fit.py: find_course_points).
-fit_snap_m: 5
+    # FIT course export: turn classification (docs/specs/fit-course-export.md).
+    # Angle thresholds in degrees; below "straight" is a decision point passed
+    # straight through, above "sharp" is a retrace turnaround.
+    fit_turn_thresholds_deg: {straight: 20, slight: 45, turn: 135, sharp: 170}
+    # Bearings are measured over this many meters before/after a junction, so
+    # snap jitter and tiny zig-zags don't count as turns.
+    fit_bearing_window_m: 15
+    # Whether a junction the route passes straight through gets a "straight"
+    # cue: ambiguous (only when another branch leaves close enough to be
+    # mistaken for it), all, or none.
+    fit_straight_cues: ambiguous
+    # Decision points directly joined by an edge no longer than this are one
+    # cue, not several: real intersections are sometimes digitized as multiple
+    # graph vertices linked by a short connector (a crosswalk, a curb cut).
+    # Topology, not route distance, so two separate intersections that happen
+    # to sit close together on the route never merge into one.
+    fit_cluster_m: 20
+    # Nominal pace used to synthesize record timestamps (the watch's virtual
+    # partner reads these); doesn't affect the route itself.
+    fit_course_pace_min_per_mi: 9.0
+    # How far a route point may be from a route_edge and still snap onto it when
+    # re-deriving decision points for FIT export (app/fit.py: find_course_points).
+    fit_snap_m: 5

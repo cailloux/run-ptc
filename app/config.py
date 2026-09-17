@@ -42,8 +42,11 @@ class Settings:
     fit_snap_m: float
 
 
-def load_settings(path: Path = CONFIG_DIR / "settings.yaml") -> Settings:
-    data = yaml.safe_load(path.read_text())
+def load_settings(path: Path = CONFIG_DIR / "settings.yaml", network: str = "ptc") -> Settings:
+    all_networks = yaml.safe_load(path.read_text())["networks"]
+    if network not in all_networks:
+        raise ValueError(f"{path}: no settings for network {network!r}")
+    data = all_networks[network]
     for key in ("cartpath_counted_types", "sync_run_types", "match_radius_wide_road_classes",
                 "divided_roads"):
         data[key] = tuple(data[key])
